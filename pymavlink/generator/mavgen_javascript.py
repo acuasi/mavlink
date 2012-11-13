@@ -154,19 +154,16 @@ def mavfmt(field):
 def generate_mavlink_class(outf, msgs, xml):
     print("Generating MAVLink class")
 
-    outf.write("\n\nmavlink_map = {\n");
+    outf.write("\n\nmavlink.mavlink_map = {\n");
     for m in msgs:
-        outf.write("        MAVLINK_MSG_ID_%s : ( '%s', MAVLink_%s_message, %s, %u ),\n" % (
+        outf.write("        MAVLINK_MSG_ID_%s : { fmt: '%s', type: MAVLink_%s_message, order_map: %s, crc_extra: %u },\n" % (
             m.name.upper(), m.fmtstr, m.name.lower(), m.order_map, m.crc_extra))
     outf.write("}\n\n")
     
     t.write(outf, """
-class MAVError(Exception):
-        '''MAVLink error class'''
-        def __init__(self, msg):
-            Exception.__init__(self, msg)
-            self.message = msg
 
+/** org: This is only used in one place, I think, and should be inlined there.  Leaving it here as remenant until
+that coding is done.
 class MAVString(str):
         '''NUL terminated string'''
         def __init__(self, s):
@@ -176,6 +173,10 @@ class MAVString(str):
             if i == -1:
                 return self[:]
             return self[0:i]
+*/
+
+/** org: again, unsure how to render this in the JS context.  It's a somewhat structured
+representation of a bad data packet, I think intended for logging/debugging.
 
 class MAVLink_bad_data(MAVLink_message):
         '''
@@ -187,167 +188,243 @@ class MAVLink_bad_data(MAVLink_message):
                 self.data = data
                 self.reason = reason
                 self._msgbuf = data
-            
+*/
+
 class MAVLink(object):
         '''MAVLink protocol handling class'''
+/* MAVLink protocol handling class */
+MAVLink = function(srcSystem, srcComponent) {
         def __init__(self, file, srcSystem=0, srcComponent=0):
-                self.seq = 0
-                self.file = file
-                self.srcSystem = srcSystem
-                self.srcComponent = srcComponent
-                self.callback = None
-                self.callback_args = None
-                self.callback_kwargs = None
-                self.buf = array.array('B')
-                self.expected_length = 6
-                self.have_prefix_error = False
-                self.robust_parsing = False
-                self.protocol_marker = ${protocol_marker}
-                self.little_endian = ${little_endian}
-                self.crc_extra = ${crc_extra}
-                self.sort_fields = ${sort_fields}
-                self.total_packets_sent = 0
-                self.total_bytes_sent = 0
-                self.total_packets_received = 0
-                self.total_bytes_received = 0
-                self.total_receive_errors = 0
-                self.startup_time = time.time()
 
+    this.seq = 0;
+    this.file = file;
+    this.srcSystem = (typeof srcSystem === 'undefined') ? 0 : srcSystem;
+    this.srcComponent =  (typeof srcComponent === 'undefined') ? 0 : srcComponent;
+    this.callback = None;
+    this.callback_args = None;
+    this.callback_kwargs = None;
+    
+    // org: this.buf = array.array('B');  -- intent is to have an array of unsigned chars.
+    // Reference: https://developer.mozilla.org/en-US/docs/JavaScript_typed_arrays/ArrayBufferView#Typed_array_subclasses
+    // Not sure what is needed for this, yet.
+    this.buf = new Uint8Array();
+
+    this.expected_length = 6;
+    this.have_prefix_error = False;
+    this.robust_parsing = False;
+    this.protocol_marker = ${protocol_marker};
+    this.little_endian = ${little_endian};
+    this.crc_extra = ${crc_extra};
+    this.sort_fields = ${sort_fields};
+    this.total_packets_sent = 0;
+    this.total_bytes_sent = 0;
+    this.total_packets_received = 0;
+    this.total_bytes_received = 0;
+    this.total_receive_errors = 0;
+    // org: this.startup_time = time.time(); -- not sure how this is used
+    this.startup_time = Date.now();
+    
+}            
+
+/** org: Because we're in a fully event-driven context, I don't think this is needed.
         def set_callback(self, callback, *args, **kwargs):
             self.callback = callback
             self.callback_args = args
             self.callback_kwargs = kwargs
-            
-        def send(self, mavmsg):
-                '''send a MAVLink message'''
-                buf = mavmsg.pack(self)
-                self.file.write(buf)
-                self.seq = (self.seq + 1) % 255
-                self.total_packets_sent += 1
-                self.total_bytes_sent += len(buf)
+*/
 
-        def bytes_needed(self):
-            '''return number of bytes needed for next parsing stage'''
-            ret = self.expected_length - len(self.buf)
-            if ret <= 0:
-                return 1
-            return ret
+/* Send a MAVLink message */
+MAVLink.prototype.send = function(mavmsg) {
+        buf = mavmsg.pack(this);
+        this.file.write(buf);
+        this.seq = (this.seq + 1) % 255;
+        this.total_packets_sent +=1;
+        this.total_bytes_sent += buf.length();
+}
 
-        def parse_char(self, c):
-            '''input some data bytes, possibly returning a new message'''
-            if isinstance(c, str):
-                self.buf.fromstring(c)
-            else:
-                self.buf.extend(c)
-            self.total_bytes_received += len(c)
-            if len(self.buf) >= 1 and self.buf[0] != ${protocol_marker}:
-                magic = self.buf[0]
-                self.buf = self.buf[1:]
-                if self.robust_parsing:
-                    m = MAVLink_bad_data(chr(magic), "Bad prefix")
-                    if self.callback:
-                        self.callback(m, *self.callback_args, **self.callback_kwargs)
-                    self.expected_length = 6
-                    self.total_receive_errors += 1
-                    return m
-                if self.have_prefix_error:
-                    return None
-                self.have_prefix_error = True
-                self.total_receive_errors += 1
-                raise MAVError("invalid MAVLink prefix '%s'" % magic) 
-            self.have_prefix_error = False
-            if len(self.buf) >= 2:
-                (magic, self.expected_length) = struct.unpack('BB', self.buf[0:2])
-                self.expected_length += 8
-            if self.expected_length >= 8 and len(self.buf) >= self.expected_length:
-                mbuf = self.buf[0:self.expected_length]
-                self.buf = self.buf[self.expected_length:]
-                self.expected_length = 6
-                if self.robust_parsing:
-                    try:
-                        m = self.decode(mbuf)
-                        self.total_packets_received += 1
-                    except MAVError as reason:
-                        m = MAVLink_bad_data(mbuf, reason.message)
-                        self.total_receive_errors += 1
-                else:
-                    m = self.decode(mbuf)
-                    self.total_packets_received += 1
-                if self.callback:
-                    self.callback(m, *self.callback_args, **self.callback_kwargs)
-                return m
-            return None
+// return number of bytes needed for next parsing stage
+MAVLink.prototype.bytes_needed = function() {
+    ret = this.expected_length - this.buf.length();
+    return ( ret <= 0 ) ? 1 : ret;
+}
 
-        def parse_buffer(self, s):
-            '''input some data bytes, possibly returning a list of new messages'''
-            m = self.parse_char(s)
-            if m is None:
-                return None
-            ret = [m]
-            while True:
-                m = self.parse_char("")
-                if m is None:
-                    return ret
-                ret.append(m)
-            return ret
+// input some data bytes, possibly returning a new message
+MAVLink.prototype.parse_char(c) {
 
-        def decode(self, msgbuf):
-                '''decode a buffer as a MAVLink message'''
-                # decode the header
-                try:
-                    magic, mlen, seq, srcSystem, srcComponent, msgId = struct.unpack('cBBBBB', msgbuf[:6])
-                except struct.error as emsg:
-                    raise MAVError('Unable to unpack MAVLink header: %s' % emsg)
-                if ord(magic) != ${protocol_marker}:
-                    raise MAVError("invalid MAVLink prefix '%s'" % magic)
-                if mlen != len(msgbuf)-8:
-                    raise MAVError('invalid MAVLink message length. Got %u expected %u, msgId=%u' % (len(msgbuf)-8, mlen, msgId))
+    this.buf.push(c);    
+    this.total_bytes_received += c.length();
 
-                if not msgId in mavlink_map:
-                    raise MAVError('unknown MAVLink message ID %u' % msgId)
+    if( this.buf.length() >= 1 && this.buf[0] != ${protocol_marker} ) {
 
-                # decode the payload
-                (fmt, type, order_map, crc_extra) = mavlink_map[msgId]
+            var magic = this.buf[0];
+            this.buf = this.buf.slice(1);
 
-                # decode the checksum
-                try:
-                    crc, = struct.unpack('<H', msgbuf[-2:])
-                except struct.error as emsg:
-                    raise MAVError('Unable to unpack MAVLink CRC: %s' % emsg)
-                crc2 = mavutil.x25crc(msgbuf[1:-2])
-                if ${crc_extra}: # using CRC extra 
-                    crc2.accumulate(chr(crc_extra))
-                if crc != crc2.crc:
-                    raise MAVError('invalid MAVLink CRC in msgID %u 0x%04x should be 0x%04x' % (msgId, crc, crc2.crc))
+            if( this.robust_parsing ) {
+                var m = new MAVLink_bad_data( String.charCodeAt(magic), "Bad prefix" );
+                
+                // Skipping callback implementation found in original code (mavgen_python.py@295)
+                
+                this.expected_length = 6;
+                this.total_receive_errors +=1;
+                return m;
+            }
 
-                try:
-                    t = struct.unpack(fmt, msgbuf[6:-2])
-                except struct.error as emsg:
-                    raise MAVError('Unable to unpack MAVLink payload type=%s fmt=%s payloadLength=%u: %s' % (
-                        type, fmt, len(msgbuf[6:-2]), emsg))
+            if( this.have_prefix_error ) {
+                return null;
+            }
 
-                tlist = list(t)
-                # handle sorted fields
-                if ${sort_fields}:
-                    t = tlist[:]
-                    for i in range(0, len(tlist)):
-                        tlist[i] = t[order_map[i]]
+            this.have_prefix_error = true;
+            this.total_receive_errors += 1;
+            throw new Error("invalid MAVLink prefix '"+ magic +"'");
+    }
+    this.have_prefix_error = false;
 
-                # terminate any strings
-                for i in range(0, len(tlist)):
-                    if isinstance(tlist[i], str):
-                        tlist[i] = MAVString(tlist[i])
-                t = tuple(tlist)
-                # construct the message object
-                try:
-                    m = type(*t)
-                except Exception as emsg:
-                    raise MAVError('Unable to instantiate MAVLink message of type %s : %s' % (type, emsg))
-                m._msgbuf = msgbuf
-                m._payload = msgbuf[6:-2]
-                m._crc = crc
-                m._header = MAVLink_header(msgId, mlen, seq, srcSystem, srcComponent)
-                return m
+    if( this.buf.length() ) >= 2 {
+        var unpacked = jspack.unpack('BB', this.buf.slice(0, 2));
+        magic = unpacked[0];
+        this.expected_length = unpacked[1] + 8;
+    }
+
+    if( this.expected_length >= 8 and this.buf.length() >= this.expected_length ) {
+        var mbuf = this.buf.slice(0, this.expected_length);
+        this.buf = this.buf.slice(this.expected_length);
+        this.expected_length = 6;
+
+        if( this.robust_parsing ) {
+
+            try {
+                var m = this.decode(mbuf);
+                this.total_packets_received += 1;
+            }
+            catch(e) {
+                var m = MAVLink_bad_data(mbuf, e.message);
+                this.total_receive_errors += 1;
+            }
+
+        } else {
+            var m = this.decode(mbuf);
+            this.total_packets_received += 1;
+        }
+
+        // Skipping callback implementation found in original code (mavgen_python.py@323)
+
+        return m;
+    }
+    return null;
+}
+
+// input some data bytes, possibly returning an array of new messages
+MAVLink.prototype.parse_buffer(s) {
+    var m = this.parse_char(s);
+
+    if ( null === m ) {
+        return null;
+    }
+    
+    var ret = [m];
+    while(true) {
+        m = this.parse_char("");
+        if ( null === m ) {
+            return ret;
+        }
+        ret.push(m);
+    }
+    return ret;
+
+}
+
+/* decode a buffer as a MAVLink message */
+MAVLink.prototype.decode(msgbuf) {
+
+        // decode the header
+        try {
+            var unpacked = jspack.unpack('cBBBBB', msgbuf.slice(0, 6));
+            magic = unpacked[0];
+            mlen = unpacked[1];
+            seq = unpacked[2];
+            srcSystem = unpacked[3];
+            srcComponent = unpacked[4];
+            msgId = unpacked[5];
+        }
+        catch(e) {
+            throw new Error('Unable to unpack MAVLink header: ' + e.message);
+        }
+
+        if (magic.charCodeAt(0) != ${protocol_marker}) {
+            throw new Error("invalid MAVLink prefix '"+magic+"'");
+        }
+
+        if( mlen != msgbuf.length() - 8 ) {
+            throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length() - 8)) + " expected " + mlen + ", msgId=" + msgId);
+        }
+
+        if( false === _.has(mavlink.mavlink_map, msgId) ) {
+            throw new Error("unknown MAVLink message ID " + msgId);
+        }
+
+        // decode the payload
+        // refs: (fmt, type, order_map, crc_extra) = mavlink_map[msgId]
+        var decoder = mavlink_map[msgId];
+
+        // decode the checksum
+        try {
+            var crc = jspack.unpack('<H', msgbuf.slice(-2));
+        }   
+        catch (e) {
+            throw new Error("Unable to unpack MAVLink CRC: " + e.message);
+        }
+
+        var crc2 = mavutil.x25crc(msgbuf.slice(1, -2));
+
+        if (${crc_extra}) {
+            // using CRC extra 
+            crc2.accumulate(String.charCodeAt(decoder.crc_extra));
+        }
+
+        if ( crc != crc2.crc ) {
+            throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ' 0x' +crc+ ' should be 0x'+crc2.crc);
+        }
+
+        try {
+            var t = jspack.unpack(decoder.fmt, msgbuf.slice(6:-2));
+        }
+        catch (e) {
+            throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' fmt='+decoder.fmt+' payloadLength='+ msgbuf.slice(6, -2).length() +': '+ e.message);
+        }
+
+        /* org: these parts, I need to see what they're doing before translating.
+        Perhaps are syntatic sugar.
+
+        tlist = list(t) ?? does what?
+        
+        # handle sorted fields
+        if (${sort_fields}) {
+            t = tlist[:]
+            for i in range(0, len(tlist)):
+                tlist[i] = t[order_map[i]]
+        }
+
+        # terminate any strings
+        for i in range(0, len(tlist)):
+            if isinstance(tlist[i], str):
+                tlist[i] = MAVString(tlist[i])
+        t = tuple(tlist)
+        */
+
+        // construct the message object
+        try {
+            // Unlikely to work.  Will need to build factory.
+            var m = new decoder.type;
+        }
+        catch (e) {
+            throw new Error('Unable to instantiate MAVLink message of type '+decoder.type+' : ' + e.message);
+        }
+        m._msgbuf = msgbuf;
+        m._payload = msgbuf.slice(6:-2);
+        m._crc = crc;
+        m._header = new MAVLink_header(msgId, mlen, seq, srcSystem, srcComponent);
+        return m;
+}
 """, xml)
 
 def generate_methods(outf, msgs):
@@ -359,17 +436,20 @@ def generate_methods(outf, msgs):
             ret += "                %-18s        : %s (%s)\n" % (f.name, f.description.strip(), f.type)
         return ret
 
-    wrapper = textwrap.TextWrapper(initial_indent="", subsequent_indent="                ")
+    wrapper = textwrap.TextWrapper(initial_indent="", subsequent_indent="\t")
 
     for m in msgs:
         comment = "%s\n\n%s" % (wrapper.fill(m.description.strip()), field_descriptions(m.fields))
 
         selffieldnames = 'self, '
         for f in m.fields:
-            if f.omit_arg:
-                selffieldnames += '%s=%s, ' % (f.name, f.const_value)
-            else:
-                selffieldnames += '%s, ' % f.name
+            # if f.omit_arg:
+            #    selffieldnames += '%s=%s, ' % (f.name, f.const_value)
+            #else:
+            # -- Omitting the code above because it is rarely used (only once?) and would need some special handling
+            # in javascript.  Specifically, inside the method definition, it needs to check for a value then assign
+            # a default.
+            selffieldnames += '%s, ' % f.name
         selffieldnames = selffieldnames[:-2]
 
         sub = {'NAMELOWER'      : m.name.lower(),
@@ -378,25 +458,22 @@ def generate_methods(outf, msgs):
                'FIELDNAMES'     : ", ".join(m.fieldnames)}
 
         t.write(outf, """
-        def ${NAMELOWER}_encode(${SELFFIELDNAMES}):
-                '''
-                ${COMMENT}
-                '''
-                msg = MAVLink_${NAMELOWER}_message(${FIELDNAMES})
-                msg.pack(self)
-                return msg
-            
+/* 
+${COMMENT}
+*/
+MAVLink.prototype.${NAMELOWER}_encode(${SELFFIELDNAMES}) {
+    var msg = MAVLink_${NAMELOWER}_message(${FIELDNAMES});
+    msg.pack(this);
+    return msg;
+}
 """, sub)
 
         t.write(outf, """
-        def ${NAMELOWER}_send(${SELFFIELDNAMES}):
-                '''
-                ${COMMENT}
-                '''
-                return self.send(self.${NAMELOWER}_encode(${FIELDNAMES}))
-            
-""", sub)
+MAVLink.prototype.${NAMELOWER}_send(${SELFFIELDNAMES}) {
+    return this.send(this.${NAMELOWER}_encode(${FIELDNAMES}));
+}
 
+""", sub)
 
 def generate(basename, xml):
     '''generate complete javascript implemenation'''
