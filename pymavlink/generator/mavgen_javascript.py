@@ -23,8 +23,8 @@ Note: this file has been auto-generated. DO NOT EDIT
 */
 
 //org: import struct, array, mavutil, time, json
-var jspack = require("node-jspack"),
-    mavutil = require("mavutil");
+var jspack = require("../lib/node-jspack-master/jspack.js"),
+    mavutil = require("../lib/mavutil.js");
 
 //org: WIRE_PROTOCOL_VERSION = "${WIRE_PROTOCOL_VERSION}"
 var mavlink = {};
@@ -44,12 +44,14 @@ mavlink.MAVLINK_TYPE_FLOAT    = 9
 mavlink.MAVLINK_TYPE_DOUBLE   = 10
 
 // Class definition: MAVLink_header
-MAVLink_header = function(msgId, mlen=0, seq=0, srcSystem=0, srcComponent=0) {
-        this.mlen = mlen
-        this.seq = seq
-        this.srcSystem = srcSystem
-        this.srcComponent = srcComponent
+MAVLink_header = function(msgId, mlen, seq, srcSystem, srcComponent) {
+
+        this.mlen = ( typeof mlen === 'undefined' ) ? 0 : mlen;
+        this.seq = ( typeof seq === 'undefined' ) ? 0 : seq;
+        this.srcSystem = ( typeof srcSystem === 'undefined' ) ? 0 : srcSystem;
+        this.srcComponent = ( typeof srcComponent === 'undefined' ) ? 0 : srcComponent;
         this.msgId = msgId
+
 }
 
 MAVLink_header.prototype.pack = function() {
@@ -117,7 +119,7 @@ MAVLink_%s_message = function(MAVLink_message
         if len(m.fields) != 0:
                 outf.write(", " + ", ".join(m.fieldnames))
         outf.write(") {\n")
-        outf.write("                MAVLink_message.(this, MAVLINK_MSG_ID_%s, '%s');\n" % (m.name.upper(), m.name.upper()))
+        outf.write("                MAVLink_message(this, MAVLINK_MSG_ID_%s, '%s');\n" % (m.name.upper(), m.name.upper()))
         if len(m.fieldnames) != 0:
                 outf.write("                this.fieldnames = ['%s'];\n" % "', '".join(m.fieldnames))
         for f in m.fields:
@@ -193,8 +195,7 @@ class MAVLink_bad_data(MAVLink_message):
 */
 
 /* MAVLink protocol handling class */
-MAVLink = function(srcSystem, srcComponent) {
-        def __init__(self, file, srcSystem=0, srcComponent=0):
+MAVLink = function(file, srcSystem, srcComponent) {
 
     this.seq = 0;
     this.file = file;
@@ -249,7 +250,7 @@ MAVLink.prototype.bytes_needed = function() {
 }
 
 // input some data bytes, possibly returning a new message
-MAVLink.prototype.parse_char(c) {
+MAVLink.prototype.parse_char = function(c) {
 
     this.buf.push(c);    
     this.total_bytes_received += c.length();
@@ -279,13 +280,13 @@ MAVLink.prototype.parse_char(c) {
     }
     this.have_prefix_error = false;
 
-    if( this.buf.length() ) >= 2 {
+    if( this.buf.length() >= 2 ) {
         var unpacked = jspack.unpack('BB', this.buf.slice(0, 2));
         magic = unpacked[0];
         this.expected_length = unpacked[1] + 8;
     }
 
-    if( this.expected_length >= 8 and this.buf.length() >= this.expected_length ) {
+    if( this.expected_length >= 8 && this.buf.length() >= this.expected_length ) {
         var mbuf = this.buf.slice(0, this.expected_length);
         this.buf = this.buf.slice(this.expected_length);
         this.expected_length = 6;
@@ -314,7 +315,7 @@ MAVLink.prototype.parse_char(c) {
 }
 
 // input some data bytes, possibly returning an array of new messages
-MAVLink.prototype.parse_buffer(s) {
+MAVLink.prototype.parse_buffer = function(s) {
     var m = this.parse_char(s);
 
     if ( null === m ) {
@@ -334,7 +335,7 @@ MAVLink.prototype.parse_buffer(s) {
 }
 
 /* decode a buffer as a MAVLink message */
-MAVLink.prototype.decode(msgbuf) {
+MAVLink.prototype.decode = function(msgbuf) {
 
         // decode the header
         try {
@@ -355,7 +356,7 @@ MAVLink.prototype.decode(msgbuf) {
         }
 
         if( mlen != msgbuf.length() - 8 ) {
-            throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length() - 8)) + " expected " + mlen + ", msgId=" + msgId);
+            throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length() - 8) + " expected " + mlen + ", msgId=" + msgId);
         }
 
         if( false === _.has(mavlink.mavlink_map, msgId) ) {
@@ -386,7 +387,7 @@ MAVLink.prototype.decode(msgbuf) {
         }
 
         try {
-            var t = jspack.unpack(decoder.fmt, msgbuf.slice(6:-2));
+            var t = jspack.unpack(decoder.fmt, msgbuf.slice(6, -2));
         }
         catch (e) {
             throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' fmt='+decoder.fmt+' payloadLength='+ msgbuf.slice(6, -2).length() +': '+ e.message);
@@ -420,7 +421,7 @@ MAVLink.prototype.decode(msgbuf) {
             throw new Error('Unable to instantiate MAVLink message of type '+decoder.type+' : ' + e.message);
         }
         m._msgbuf = msgbuf;
-        m._payload = msgbuf.slice(6:-2);
+        m._payload = msgbuf.slice(6, -2);
         m._crc = crc;
         m._header = new MAVLink_header(msgId, mlen, seq, srcSystem, srcComponent);
         return m;
@@ -461,21 +462,21 @@ def generate_methods(outf, msgs):
 /* 
 ${COMMENT}
 */
-MAVLink.prototype.${NAMELOWER}_encode(${SELFFIELDNAMES}) {
-    var msg = MAVLink_${NAMELOWER}_message(${FIELDNAMES});
+MAVLink.prototype.${NAMELOWER}_encode = function(${SELFFIELDNAMES}) {
+    var msg = new MAVLink_${NAMELOWER}_message(${FIELDNAMES});
     msg.pack(this);
     return msg;
 }
 """, sub)
 
         t.write(outf, """
-MAVLink.prototype.${NAMELOWER}_send(${SELFFIELDNAMES}) {
+MAVLink.prototype.${NAMELOWER}_send = function(${SELFFIELDNAMES}) {
     return this.send(this.${NAMELOWER}_encode(${FIELDNAMES}));
 }
 
 """, sub)
 
-def generate_footer(outf)
+def generate_footer(outf):
     t.write(outf, """
 
 // Expose this code as a module
