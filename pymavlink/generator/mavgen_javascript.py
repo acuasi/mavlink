@@ -43,7 +43,8 @@ mavlink.MAVLINK_TYPE_INT64_T  = 8
 mavlink.MAVLINK_TYPE_FLOAT    = 9
 mavlink.MAVLINK_TYPE_DOUBLE   = 10
 
-function MAVLink_header(msgId, mlen=0, seq=0, srcSystem=0, srcComponent=0) {
+// Class definition: MAVLink_header
+MAVLink_header = function(msgId, mlen=0, seq=0, srcSystem=0, srcComponent=0) {
         this.mlen = mlen
         this.seq = seq
         this.srcSystem = srcSystem
@@ -51,11 +52,12 @@ function MAVLink_header(msgId, mlen=0, seq=0, srcSystem=0, srcComponent=0) {
         this.msgId = msgId
 }
 
-MAVLink_header.pack = function() {
+MAVLink_header.prototype.pack = function() {
     return jspack.pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
 }
 
-var MAVLink_message = function(msgId, name) {
+// Class definition: MAVLink_message
+MAVLink_message = function(msgId, name) {
     this.header = new MAVLink_header(msgId);
 }
 
@@ -68,7 +70,7 @@ but not sure why.  Perhaps not needed.
         return self._msgbuf.tostring()
 */
 
-MAVLink_message.pack = function(mav, crc_extra, payload) {
+MAVLink_message.prototype.pack = function(mav, crc_extra, payload) {
     this.payload = payload;
     this.header = new MAVLink_header(this.header.msgId, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
     this.msgbuf = this.header.pack() + payload;
@@ -110,7 +112,7 @@ def generate_classes(outf, msgs):
 /*
 %s
 */
-var MAVLink_%s_message = function(MAVLink_message
+MAVLink_%s_message = function(MAVLink_message
         """ % (wrapper.fill(m.description.strip()), m.name.lower()))
         if len(m.fields) != 0:
                 outf.write(", " + ", ".join(m.fieldnames))
@@ -122,7 +124,7 @@ var MAVLink_%s_message = function(MAVLink_message
                 outf.write("                this.%s = %s;\n" % (f.name, f.name))
         outf.write("\n}")
         outf.write("""
-MAVLink_%s_message.pack = function(mav) {
+MAVLink_%s_message.prototype.pack = function(mav) {
                 return MAVLink_message.pack(mav, %u, jspack.pack('%s'""" % (m.name.lower(), m.crc_extra, m.fmtstr))
         if len(m.fields) != 0:
                 outf.write(", this." + ", this.".join(m.ordered_fieldnames))
@@ -190,8 +192,6 @@ class MAVLink_bad_data(MAVLink_message):
                 self._msgbuf = data
 */
 
-class MAVLink(object):
-        '''MAVLink protocol handling class'''
 /* MAVLink protocol handling class */
 MAVLink = function(srcSystem, srcComponent) {
         def __init__(self, file, srcSystem=0, srcComponent=0):
@@ -475,8 +475,18 @@ MAVLink.prototype.${NAMELOWER}_send(${SELFFIELDNAMES}) {
 
 """, sub)
 
+def generate_footer(outf)
+    t.write(outf, """
+
+// Expose this code as a module
+exports.mavlink = mavlink;
+
+""")
+
 def generate(basename, xml):
-    '''generate complete javascript implemenation'''
+    '''generate complete javascript implementation'''
+
+    print basename;
     if basename.endswith('.js'):
         filename = basename
     else:
@@ -509,5 +519,6 @@ def generate(basename, xml):
     generate_classes(outf, msgs)
     generate_mavlink_class(outf, msgs, xml[0])
     generate_methods(outf, msgs)
+    generate_footer(outf)
     outf.close()
     print("Generated %s OK" % filename)

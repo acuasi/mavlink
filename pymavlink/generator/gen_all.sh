@@ -7,7 +7,8 @@ for protocol in 0.9 1.0; do
      mkdir -p python
      ./mavgen.py --lang=python --wire-protocol=$protocol --output=python/mavlink_${base}_v$protocol.py $xml || exit 1
      mkdir -p javascript
-     ./mavgen.py --lang=javascript --wire-protocol=$protocol --output=javascript/mavlink_${base}_v$protocol.js $xml || exit 1
+     mkdir -p javascript/implementations
+     ./mavgen.py --lang=javascript --wire-protocol=$protocol --output=javascript/implementations/mavlink_${base}_v$protocol.js $xml || exit 1
  done
 done
 
