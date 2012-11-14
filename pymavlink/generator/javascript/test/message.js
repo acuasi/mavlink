@@ -8,10 +8,11 @@ describe('MAVLink message registry', function() {
   });
 
   it('assigns message properties to each message', function() {
-    mavlink.messages['battery_status'].format.should.equal("<HHHHHHhBb");
-    mavlink.messages['battery_status'].order_map.should.equal([7, 0, 1, 2, 3, 4, 5, 6, 8]);
-    mavlink.messages['battery_status'].crc_extra.should.equal(134);
-    mavlink.messages['battery_status'].id.should.equal(mavlink.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS);
+    var m = new mavlink.messages['battery_status']();
+    m.format.should.equal("<HHHHHHhBb");
+    m.order_map.should.eql([7, 0, 1, 2, 3, 4, 5, 6, 8]); // should.eql = shallow comparison
+    m.crc_extra.should.equal(42);
+    m.id.should.equal(mavlink.MAVLINK_MSG_ID_BATTERY_STATUS);
   });
 
 });

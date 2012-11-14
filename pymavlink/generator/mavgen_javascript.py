@@ -61,14 +61,16 @@ mavlink.header.prototype.pack = function() {
     return jspack.pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
 }
 
-// Class definition: MAVLink_message
-mavlink.message = function(msgId) {
-    this.header = new mavlink.MAVLink_header(msgId);
-}
+// Base class declaration: mavlink.message will be the parent class for each
+// concrete implementation in mavlink.messages.
+mavlink.message = function() {};
 
+// This pack function builds the header and produces a complete MAVLink message,
+// including CRC.
 mavlink.message.prototype.pack = function(mav, crc_extra, payload) {
+
     this.payload = payload;
-    this.header = new mavlink.header(this.header.msgId, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
+    this.header = new mavlink.header(this.id, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
     this.msgbuf = this.header.pack() + payload;
 
     // May need to slice msgbuf, not sure yet
@@ -77,6 +79,7 @@ mavlink.message.prototype.pack = function(mav, crc_extra, payload) {
     this.crc = crc.crc;
     this.msgbuf += jspack.pack('<H', this.crc);
     return this.msgbuf;
+
 }
 
 """, {'FILELIST' : ",".join(args),
@@ -469,7 +472,7 @@ def generate_footer(outf):
     t.write(outf, """
 
 // Expose this code as a module
-exports.mavlink = new mavlink();
+exports.mavlink = mavlink;
 
 """)
 
