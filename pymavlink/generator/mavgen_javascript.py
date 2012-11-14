@@ -22,15 +22,18 @@ Generated from: ${FILELIST}
 Note: this file has been auto-generated. DO NOT EDIT
 */
 
-//org: import struct, array, mavutil, time, json
-var jspack = require("../lib/node-jspack-master/jspack.js"),
-    mavutil = require("../lib/mavutil.js");
+jspack = require("../lib/node-jspack-master/jspack.js"),
+    mavutil = require("../lib/mavutil.js"),
+    _ = require("underscore");
 
-//org: WIRE_PROTOCOL_VERSION = "${WIRE_PROTOCOL_VERSION}"
-var mavlink = {};
+mavlink = function(){};
+
+/* Little hacks to ease translation from Python generator, will fix. */
+var True = true;
+var False = false;
+
 mavlink.WIRE_PROTOCOL_VERSION = "${WIRE_PROTOCOL_VERSION}";
 
-//org: # some base types from mavlink_types.h
 mavlink.MAVLINK_TYPE_CHAR     = 0
 mavlink.MAVLINK_TYPE_UINT8_T  = 1
 mavlink.MAVLINK_TYPE_INT8_T   = 2
@@ -44,7 +47,7 @@ mavlink.MAVLINK_TYPE_FLOAT    = 9
 mavlink.MAVLINK_TYPE_DOUBLE   = 10
 
 // Class definition: MAVLink_header
-MAVLink_header = function(msgId, mlen, seq, srcSystem, srcComponent) {
+mavlink.header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 
         this.mlen = ( typeof mlen === 'undefined' ) ? 0 : mlen;
         this.seq = ( typeof seq === 'undefined' ) ? 0 : seq;
@@ -54,27 +57,18 @@ MAVLink_header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 
 }
 
-MAVLink_header.prototype.pack = function() {
+mavlink.header.prototype.pack = function() {
     return jspack.pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
 }
 
 // Class definition: MAVLink_message
-MAVLink_message = function(msgId, name) {
-    this.header = new MAVLink_header(msgId);
+mavlink.message = function(msgId) {
+    this.header = new mavlink.MAVLink_header(msgId);
 }
 
-/* Org: not sure what to do with this one yet.  Intent is to ensure it's a string,
-but not sure why.  Perhaps not needed.
-
-    def get_msgbuf(self):
-        if isinstance(self._msgbuf, str):
-            return self._msgbuf
-        return self._msgbuf.tostring()
-*/
-
-MAVLink_message.prototype.pack = function(mav, crc_extra, payload) {
+mavlink.message.prototype.pack = function(mav, crc_extra, payload) {
     this.payload = payload;
-    this.header = new MAVLink_header(this.header.msgId, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
+    this.header = new mavlink.header(this.header.msgId, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
     this.msgbuf = this.header.pack() + payload;
 
     // May need to slice msgbuf, not sure yet
@@ -107,30 +101,83 @@ def generate_message_ids(outf, msgs):
         outf.write("mavlink.MAVLINK_MSG_ID_%s = %u\n" % (m.name.upper(), m.id))
 
 def generate_classes(outf, msgs):
+    """
+    Generate the implementations of the classes representing MAVLink messages.
+
+    """
     print("Generating class definitions")
-    wrapper = textwrap.TextWrapper(initial_indent="        ", subsequent_indent="        ")
+    wrapper = textwrap.TextWrapper(initial_indent="", subsequent_indent="")
+    outf.write("\nmavlink.messages = {};\n\n");
+
+    def field_descriptions(fields):
+        ret = ""
+        for f in fields:
+            ret += "                %-18s        : %s (%s)\n" % (f.name, f.description.strip(), f.type)
+        return ret
+
+
     for m in msgs:
-        outf.write("""
-/*
-%s
-*/
-MAVLink_%s_message = function(MAVLink_message
-        """ % (wrapper.fill(m.description.strip()), m.name.lower()))
-        if len(m.fields) != 0:
-                outf.write(", " + ", ".join(m.fieldnames))
-        outf.write(") {\n")
-        outf.write("                MAVLink_message(this, MAVLINK_MSG_ID_%s, '%s');\n" % (m.name.upper(), m.name.upper()))
-        if len(m.fieldnames) != 0:
-                outf.write("                this.fieldnames = ['%s'];\n" % "', '".join(m.fieldnames))
+
+        comment = "%s\n\n%s" % (wrapper.fill(m.description.strip()), field_descriptions(m.fields))
+
+        selffieldnames = 'self, '
         for f in m.fields:
-                outf.write("                this.%s = %s;\n" % (f.name, f.name))
-        outf.write("\n}")
+            # if f.omit_arg:
+            #    selffieldnames += '%s=%s, ' % (f.name, f.const_value)
+            #else:
+            # -- Omitting the code above because it is rarely used (only once?) and would need some special handling
+            # in javascript.  Specifically, inside the method definition, it needs to check for a value then assign
+            # a default.
+            selffieldnames += '%s, ' % f.name
+        selffieldnames = selffieldnames[:-2]
+
+        sub = {'NAMELOWER'      : m.name.lower(),
+               'SELFFIELDNAMES' : selffieldnames,
+               'COMMENT'        : comment,
+               'FIELDNAMES'     : ", ".join(m.fieldnames)}
+
+        t.write(outf, """
+/* 
+${COMMENT}
+*/
+""", sub)
+
+        # function signature + declaration
+        outf.write("mavlink.messages.%s = function(" % (m.name.lower()))
+        if len(m.fields) != 0:
+                outf.write(", ".join(m.fieldnames))
+        outf.write(") {")
+
+        # body: set message type properties    
         outf.write("""
-MAVLink_%s_message.prototype.pack = function(mav) {
-                return MAVLink_message.pack(mav, %u, jspack.pack('%s'""" % (m.name.lower(), m.crc_extra, m.fmtstr))
+
+    this.format = '%s';
+    this.id = mavlink.MAVLINK_MSG_ID_%s;
+    this.order_map = %s;
+    this.crc_extra = %u;
+    this.name = '%s';
+
+""" % (m.fmtstr, m.name.upper(), m.order_map, m.crc_extra, m.name.upper()))
+        
+        # body: set own properties
+        if len(m.fieldnames) != 0:
+                outf.write("    this.fieldnames = ['%s'];\n" % "', '".join(m.fieldnames))
+        for f in m.fields:
+                outf.write("    this.%s = %s;\n" % (f.name, f.name))
+        outf.write("\n}\n")
+
+        # inherit methods from the base message class
+        outf.write("""
+mavlink.messages.%s.prototype = new mavlink.message;
+""" % m.name.lower())
+
+        # Implement the pack() function for this message
+        outf.write("""
+mavlink.messages.%s.prototype.pack = function() {
+    return mavlink.message.pack(this.crc_extra, jspack.pack(this.format""" % m.name.lower())
         if len(m.fields) != 0:
                 outf.write(", this." + ", this.".join(m.ordered_fieldnames))
-        outf.write("))}\n")
+        outf.write("))\n}\n\n")
 
 def mavfmt(field):
     '''work out the struct format for a type'''
@@ -156,14 +203,7 @@ def mavfmt(field):
     return map[field.type]
 
 def generate_mavlink_class(outf, msgs, xml):
-    print("Generating MAVLink class")
-
-    outf.write("\n\nmavlink.mavlink_map = {\n");
-    for m in msgs:
-        outf.write("        MAVLINK_MSG_ID_%s : { fmt: '%s', type: MAVLink_%s_message, order_map: %s, crc_extra: %u },\n" % (
-            m.name.upper(), m.fmtstr, m.name.lower(), m.order_map, m.crc_extra))
-    outf.write("}\n\n")
-    
+    print("Generating MAVLink class")    
     t.write(outf, """
 
 /** org: This is only used in one place, I think, and should be inlined there.  Leaving it here as remenant until
@@ -201,9 +241,6 @@ MAVLink = function(file, srcSystem, srcComponent) {
     this.file = file;
     this.srcSystem = (typeof srcSystem === 'undefined') ? 0 : srcSystem;
     this.srcComponent =  (typeof srcComponent === 'undefined') ? 0 : srcComponent;
-    this.callback = None;
-    this.callback_args = None;
-    this.callback_kwargs = None;
     
     // org: this.buf = array.array('B');  -- intent is to have an array of unsigned chars.
     // Reference: https://developer.mozilla.org/en-US/docs/JavaScript_typed_arrays/ArrayBufferView#Typed_array_subclasses
@@ -211,8 +248,8 @@ MAVLink = function(file, srcSystem, srcComponent) {
     this.buf = new Uint8Array();
 
     this.expected_length = 6;
-    this.have_prefix_error = False;
-    this.robust_parsing = False;
+    this.have_prefix_error = false;
+    this.robust_parsing = false;
     this.protocol_marker = ${protocol_marker};
     this.little_endian = ${little_endian};
     this.crc_extra = ${crc_extra};
@@ -428,59 +465,11 @@ MAVLink.prototype.decode = function(msgbuf) {
 }
 """, xml)
 
-def generate_methods(outf, msgs):
-    print("Generating methods")
-
-    def field_descriptions(fields):
-        ret = ""
-        for f in fields:
-            ret += "                %-18s        : %s (%s)\n" % (f.name, f.description.strip(), f.type)
-        return ret
-
-    wrapper = textwrap.TextWrapper(initial_indent="", subsequent_indent="\t")
-
-    for m in msgs:
-        comment = "%s\n\n%s" % (wrapper.fill(m.description.strip()), field_descriptions(m.fields))
-
-        selffieldnames = 'self, '
-        for f in m.fields:
-            # if f.omit_arg:
-            #    selffieldnames += '%s=%s, ' % (f.name, f.const_value)
-            #else:
-            # -- Omitting the code above because it is rarely used (only once?) and would need some special handling
-            # in javascript.  Specifically, inside the method definition, it needs to check for a value then assign
-            # a default.
-            selffieldnames += '%s, ' % f.name
-        selffieldnames = selffieldnames[:-2]
-
-        sub = {'NAMELOWER'      : m.name.lower(),
-               'SELFFIELDNAMES' : selffieldnames,
-               'COMMENT'        : comment,
-               'FIELDNAMES'     : ", ".join(m.fieldnames)}
-
-        t.write(outf, """
-/* 
-${COMMENT}
-*/
-MAVLink.prototype.${NAMELOWER}_encode = function(${SELFFIELDNAMES}) {
-    var msg = new MAVLink_${NAMELOWER}_message(${FIELDNAMES});
-    msg.pack(this);
-    return msg;
-}
-""", sub)
-
-        t.write(outf, """
-MAVLink.prototype.${NAMELOWER}_send = function(${SELFFIELDNAMES}) {
-    return this.send(this.${NAMELOWER}_encode(${FIELDNAMES}));
-}
-
-""", sub)
-
 def generate_footer(outf):
     t.write(outf, """
 
 // Expose this code as a module
-exports.mavlink = mavlink;
+exports.mavlink = new mavlink();
 
 """)
 
@@ -519,7 +508,6 @@ def generate(basename, xml):
     generate_message_ids(outf, msgs)
     generate_classes(outf, msgs)
     generate_mavlink_class(outf, msgs, xml[0])
-    generate_methods(outf, msgs)
     generate_footer(outf)
     outf.close()
     print("Generated %s OK" % filename)

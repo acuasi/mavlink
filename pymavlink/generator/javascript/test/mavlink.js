@@ -7,4 +7,8 @@ describe("Generated MAVLink protocol handler object", function() {
     mavlink.should.exist;
   });
 
+  it("can be instantiated", function() {
+    var m = new MAVLink();
+  });
+
 });
