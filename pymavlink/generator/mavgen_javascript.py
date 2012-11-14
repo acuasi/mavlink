@@ -49,11 +49,11 @@ mavlink.MAVLINK_TYPE_DOUBLE   = 10
 // Class definition: MAVLink_header
 mavlink.header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 
-        this.mlen = ( typeof mlen === 'undefined' ) ? 0 : mlen;
-        this.seq = ( typeof seq === 'undefined' ) ? 0 : seq;
-        this.srcSystem = ( typeof srcSystem === 'undefined' ) ? 0 : srcSystem;
-        this.srcComponent = ( typeof srcComponent === 'undefined' ) ? 0 : srcComponent;
-        this.msgId = msgId
+    this.mlen = ( typeof mlen === 'undefined' ) ? 0 : mlen;
+    this.seq = ( typeof seq === 'undefined' ) ? 0 : seq;
+    this.srcSystem = ( typeof srcSystem === 'undefined' ) ? 0 : srcSystem;
+    this.srcComponent = ( typeof srcComponent === 'undefined' ) ? 0 : srcComponent;
+    this.msgId = msgId
 
 }
 
@@ -66,7 +66,7 @@ mavlink.header.prototype.pack = function() {
 mavlink.message = function() {};
 
 // This pack function builds the header and produces a complete MAVLink message,
-// including CRC.
+// including header and message CRC.
 mavlink.message.prototype.pack = function(mav, crc_extra, payload) {
 
     this.payload = payload;
@@ -171,16 +171,19 @@ ${COMMENT}
 
         # inherit methods from the base message class
         outf.write("""
+
 mavlink.messages.%s.prototype = new mavlink.message;
+
 """ % m.name.lower())
 
         # Implement the pack() function for this message
         outf.write("""
-mavlink.messages.%s.prototype.pack = function() {
+mavlink.messages.%s.pack = function() {
+
     return mavlink.message.pack(this.crc_extra, jspack.pack(this.format""" % m.name.lower())
         if len(m.fields) != 0:
                 outf.write(", this." + ", this.".join(m.ordered_fieldnames))
-        outf.write("))\n}\n\n")
+        outf.write("));\n\n}\n\n")
 
 def mavfmt(field):
     '''work out the struct format for a type'''
@@ -472,7 +475,7 @@ def generate_footer(outf):
     t.write(outf, """
 
 // Expose this code as a module
-exports.mavlink = mavlink;
+module.exports = mavlink;
 
 """)
 

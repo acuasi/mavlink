@@ -1,5 +1,7 @@
-var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js').mavlink,
+var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
   should = require('should');
+
+console.log(mavlink);
 
 describe('MAVLink message registry', function() {
 
@@ -21,10 +23,20 @@ describe('MAVLinkMessage', function() {
 
   beforeEach(function() {
     this.m = new mavlink.messages['battery_status'];
+
+    this.heartbeat = new mavlink.messages.heartbeat(
+      mavlink.MAV_TYPE_GENERIC,
+      mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+      mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
+      0, // custom bitfield
+      mavlink.MAV_STATE_STANDBY
+    );
+
   });
 
-  it('Can encode itself', function() {
-    this.m.should.have.property.encode;
+  it('Can pack itself', function() {
+    var packed = this.heartbeat.pack();
+    packed.should.equal('abcdefg');
   });
 
   it('Can decode itself', function() {
