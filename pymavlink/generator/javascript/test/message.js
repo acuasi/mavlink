@@ -44,7 +44,7 @@ describe('MAVLinkMessage', function() {
 
   });
 
-  it('has a set function to facilitate vivifying the objec', function() {
+  it('has a set function to facilitate vivifying the object', function() {
     this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GENERIC);
     this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA);
     this.heartbeat.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED);
