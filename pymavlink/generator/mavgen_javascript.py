@@ -65,6 +65,13 @@ mavlink.header.prototype.pack = function() {
 // concrete implementation in mavlink.messages.
 mavlink.message = function() {};
 
+// Convenience setter to facilitate turning the unpacked array of data into member properties
+mavlink.message.prototype.set = function(args) {
+    _.each(this.fieldnames, function(e, i) {
+        this[e] = args[i];
+    }, this);
+};
+
 // This pack function builds the header and produces a complete MAVLink message,
 // including header and message CRC.
 mavlink.message.prototype.pack = function(crc_extra, payload) {
@@ -162,9 +169,12 @@ ${COMMENT}
         # body: set own properties
         if len(m.fieldnames) != 0:
                 outf.write("    this.fieldnames = ['%s'];\n" % "', '".join(m.fieldnames))
-        for f in m.fields:
-                outf.write("    this.%s = %s;\n" % (f.name, f.name))
-        outf.write("\n}\n")
+        outf.write("""
+
+    this.set(arguments);
+
+}
+        """)
 
         # inherit methods from the base message class
         outf.write("""

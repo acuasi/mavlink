@@ -44,8 +44,13 @@ describe('MAVLinkMessage', function() {
 
   });
 
-
-    this.order_map = [1, 2, 3, 0, 4, 5];
+  it('has a set function to facilitate vivifying the objec', function() {
+    this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GENERIC);
+    this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA);
+    this.heartbeat.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED);
+    this.heartbeat.custom_mode.should.equal(0);
+    this.heartbeat.system_status.should.equal(mavlink.MAV_STATE_STANDBY);
+  });
 
   // TODO: the length below (9) should perhaps be instead 7.  See mavlink.unpack().
   // might have to do with the length of the encoding (<I is 4 symbols in the array) 
