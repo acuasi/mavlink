@@ -22,7 +22,7 @@ Generated from: ${FILELIST}
 Note: this file has been auto-generated. DO NOT EDIT
 */
 
-jspack = require("../lib/node-jspack-master/jspack.js"),
+jspack = require("../lib/node-jspack-master/jspack.js").jspack,
     mavutil = require("../lib/mavutil.js"),
     _ = require("underscore");
 
@@ -58,7 +58,7 @@ mavlink.header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 }
 
 mavlink.header.prototype.pack = function() {
-    return jspack.pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
+    return jspack.Pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
 }
 
 // Base class declaration: mavlink.message will be the parent class for each
@@ -67,17 +67,14 @@ mavlink.message = function() {};
 
 // This pack function builds the header and produces a complete MAVLink message,
 // including header and message CRC.
-mavlink.message.prototype.pack = function(mav, crc_extra, payload) {
+mavlink.message.prototype.pack = function(crc_extra, payload) {
 
     this.payload = payload;
-    this.header = new mavlink.header(this.id, payload.length(), mav.seq, mav.srcSystem, mav.srcComponent);
+    this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);
     this.msgbuf = this.header.pack() + payload;
 
     // May need to slice msgbuf, not sure yet
-    crc = mavutil.x25crc(this.msgbuf);
-
-    this.crc = crc.crc;
-    this.msgbuf += jspack.pack('<H', this.crc);
+    this.msgbuf += jspack.Pack('<H', mavutil.x25crc(this.msgbuf) );
     return this.msgbuf;
 
 }
@@ -117,7 +114,6 @@ def generate_classes(outf, msgs):
         for f in fields:
             ret += "                %-18s        : %s (%s)\n" % (f.name, f.description.strip(), f.type)
         return ret
-
 
     for m in msgs:
 
@@ -171,19 +167,16 @@ ${COMMENT}
 
         # inherit methods from the base message class
         outf.write("""
-
 mavlink.messages.%s.prototype = new mavlink.message;
-
 """ % m.name.lower())
 
         # Implement the pack() function for this message
         outf.write("""
-mavlink.messages.%s.pack = function() {
-
-    return mavlink.message.pack(this.crc_extra, jspack.pack(this.format""" % m.name.lower())
+mavlink.messages.%s.prototype.pack = function() {
+    return mavlink.message.prototype.pack.call(this, this.crc_extra, jspack.Pack(this.format""" % m.name.lower())
         if len(m.fields) != 0:
-                outf.write(", this." + ", this.".join(m.ordered_fieldnames))
-        outf.write("));\n\n}\n\n")
+                outf.write(", [ this." + ", this.".join(m.ordered_fieldnames) + ']')
+        outf.write("));\n}\n\n")
 
 def mavfmt(field):
     '''work out the struct format for a type'''

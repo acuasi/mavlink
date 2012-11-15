@@ -1,8 +1,6 @@
 var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
   should = require('should');
 
-console.log(mavlink);
-
 describe('MAVLink message registry', function() {
 
   it('defines constructors for every message', function() {
@@ -35,7 +33,7 @@ describe('MAVLinkMessage', function() {
   });
 
   it('Can pack itself', function() {
-    var packed = this.heartbeat.pack();
+    var packed = this.heartbeat.pack('gobs');
     packed.should.equal('abcdefg');
   });
 

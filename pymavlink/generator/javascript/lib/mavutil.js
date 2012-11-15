@@ -6,4 +6,4 @@ function mavutil() {
 
 }
 
-exports.mavutil = new mavutil();
+module.exports = new mavutil();
