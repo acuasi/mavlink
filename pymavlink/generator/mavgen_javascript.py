@@ -46,7 +46,7 @@ mavlink.MAVLINK_TYPE_INT64_T  = 8
 mavlink.MAVLINK_TYPE_FLOAT    = 9
 mavlink.MAVLINK_TYPE_DOUBLE   = 10
 
-// Class definition: MAVLink_header
+// Mavlink headers incorporate sequence, source system (platform) and source component. 
 mavlink.header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 
     this.mlen = ( typeof mlen === 'undefined' ) ? 0 : mlen;
@@ -58,7 +58,7 @@ mavlink.header = function(msgId, mlen, seq, srcSystem, srcComponent) {
 }
 
 mavlink.header.prototype.pack = function() {
-    return jspack.Pack('BBBBBB', ${PROTOCOL_MARKER}, this.memlen, this.seq, this.srcSystem, this.srcComponent, this.msgId);
+    return jspack.Pack('BBBBBB', [${PROTOCOL_MARKER}, this.mlen, this.seq, this.srcSystem, this.srcComponent, this.msgId]);
 }
 
 // Base class declaration: mavlink.message will be the parent class for each
@@ -70,11 +70,12 @@ mavlink.message = function() {};
 mavlink.message.prototype.pack = function(crc_extra, payload) {
 
     this.payload = payload;
-    this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);
-    this.msgbuf = this.header.pack() + payload;
+    this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);    
+    this.msgbuf = this.header.pack().concat(payload);
 
-    // May need to slice msgbuf, not sure yet
-    this.msgbuf += jspack.Pack('<H', mavutil.x25crc(this.msgbuf) );
+    //org:todo: May need to slice msgbuf, not sure yet
+    //        crc = mavutil.x25crc(self._msgbuf[1:])
+    this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25crc(this.msgbuf) ] ) );
     return this.msgbuf;
 
 }
@@ -202,7 +203,15 @@ def mavfmt(field):
     return map[field.type]
 
 def generate_mavlink_class(outf, msgs, xml):
-    print("Generating MAVLink class")    
+    print("Generating MAVLink class")
+
+    # Write mapper to enable decoding based on the integer message type
+    outf.write("\n\nmavlink.map = {\n");
+    for m in msgs:
+        outf.write("        %s: { format: '%s', type: mavlink.messages.%s, order_map: %s, crc_extra: %u },\n" % (
+            m.id, m.fmtstr, m.name.lower(), m.order_map, m.crc_extra))
+    outf.write("}\n\n")
+    
     t.write(outf, """
 
 /** org: This is only used in one place, I think, and should be inlined there.  Leaving it here as remenant until
@@ -271,27 +280,27 @@ MAVLink = function(file, srcSystem, srcComponent) {
 */
 
 /* Send a MAVLink message */
-MAVLink.prototype.send = function(mavmsg) {
+mavlink.prototype.send = function(mavmsg) {
         buf = mavmsg.pack(this);
         this.file.write(buf);
         this.seq = (this.seq + 1) % 255;
         this.total_packets_sent +=1;
-        this.total_bytes_sent += buf.length();
+        this.total_bytes_sent += buf.length;
 }
 
 // return number of bytes needed for next parsing stage
-MAVLink.prototype.bytes_needed = function() {
-    ret = this.expected_length - this.buf.length();
+mavlink.prototype.bytes_needed = function() {
+    ret = this.expected_length - this.buf.length;
     return ( ret <= 0 ) ? 1 : ret;
 }
 
 // input some data bytes, possibly returning a new message
-MAVLink.prototype.parse_char = function(c) {
+mavlink.prototype.parse_char = function(c) {
 
     this.buf.push(c);    
-    this.total_bytes_received += c.length();
+    this.total_bytes_received += c.length;
 
-    if( this.buf.length() >= 1 && this.buf[0] != ${protocol_marker} ) {
+    if( this.buf.length >= 1 && this.buf[0] != ${protocol_marker} ) {
 
             var magic = this.buf[0];
             this.buf = this.buf.slice(1);
@@ -316,13 +325,13 @@ MAVLink.prototype.parse_char = function(c) {
     }
     this.have_prefix_error = false;
 
-    if( this.buf.length() >= 2 ) {
-        var unpacked = jspack.unpack('BB', this.buf.slice(0, 2));
+    if( this.buf.length >= 2 ) {
+        var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
         magic = unpacked[0];
         this.expected_length = unpacked[1] + 8;
     }
 
-    if( this.expected_length >= 8 && this.buf.length() >= this.expected_length ) {
+    if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
         var mbuf = this.buf.slice(0, this.expected_length);
         this.buf = this.buf.slice(this.expected_length);
         this.expected_length = 6;
@@ -351,7 +360,7 @@ MAVLink.prototype.parse_char = function(c) {
 }
 
 // input some data bytes, possibly returning an array of new messages
-MAVLink.prototype.parse_buffer = function(s) {
+mavlink.prototype.parse_buffer = function(s) {
     var m = this.parse_char(s);
 
     if ( null === m ) {
@@ -371,96 +380,98 @@ MAVLink.prototype.parse_buffer = function(s) {
 }
 
 /* decode a buffer as a MAVLink message */
-MAVLink.prototype.decode = function(msgbuf) {
+mavlink.prototype.decode = function(msgbuf) {
 
-        // decode the header
-        try {
-            var unpacked = jspack.unpack('cBBBBB', msgbuf.slice(0, 6));
-            magic = unpacked[0];
-            mlen = unpacked[1];
-            seq = unpacked[2];
-            srcSystem = unpacked[3];
-            srcComponent = unpacked[4];
-            msgId = unpacked[5];
-        }
-        catch(e) {
-            throw new Error('Unable to unpack MAVLink header: ' + e.message);
-        }
+    var magic, mlen, seq, srcSystem, srcComponent, unpacked, msgId;
 
-        if (magic.charCodeAt(0) != ${protocol_marker}) {
-            throw new Error("invalid MAVLink prefix '"+magic+"'");
-        }
+    // decode the header
+    try {
+        unpacked = jspack.Unpack('cBBBBB', msgbuf.slice(0, 6));
+        magic = unpacked[0];
+        mlen = unpacked[1];
+        seq = unpacked[2];
+        srcSystem = unpacked[3];
+        srcComponent = unpacked[4];
+        msgId = unpacked[5];
+    }
+    catch(e) {
+        throw new Error('Unable to unpack MAVLink header: ' + e.message);
+    }
 
-        if( mlen != msgbuf.length() - 8 ) {
-            throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length() - 8) + " expected " + mlen + ", msgId=" + msgId);
-        }
+    if (magic.charCodeAt(0) != 254) {
+        throw new Error("invalid MAVLink prefix '"+magic+"'");
+    }
 
-        if( false === _.has(mavlink.mavlink_map, msgId) ) {
-            throw new Error("unknown MAVLink message ID " + msgId);
-        }
+    // TODO: this used to be length-8, find out why this works if its 6 instead of 8.
+    if( mlen != msgbuf.length - 6 ) {
+        throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length - 8) + " expected " + mlen + ", msgId=" + msgId);
+    }
 
-        // decode the payload
-        // refs: (fmt, type, order_map, crc_extra) = mavlink_map[msgId]
-        var decoder = mavlink_map[msgId];
+    if( false === _.has(mavlink.map, msgId) ) {
+        throw new Error("unknown MAVLink message ID " + msgId);
+    }
 
-        // decode the checksum
-        try {
-            var crc = jspack.unpack('<H', msgbuf.slice(-2));
-        }   
-        catch (e) {
-            throw new Error("Unable to unpack MAVLink CRC: " + e.message);
-        }
+    // decode the payload
+    // refs: (fmt, type, order_map, crc_extra) = mavlink.map[msgId]
+    var decoder = mavlink.map[msgId];
 
-        var crc2 = mavutil.x25crc(msgbuf.slice(1, -2));
+    // decode the checksum
+    try {
+        var crc = jspack.Unpack('<H', msgbuf.slice(-2));
+    }   
+    catch (e) {
+        throw new Error("Unable to unpack MAVLink CRC: " + e.message);
+    }
 
-        if (${crc_extra}) {
-            // using CRC extra 
-            crc2.accumulate(String.charCodeAt(decoder.crc_extra));
-        }
+    // This part isn't correct yet.
+/*
+    var crc2 = mavutil.x25crc(msgbuf.slice(1, -2));
 
-        if ( crc != crc2.crc ) {
-            throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ' 0x' +crc+ ' should be 0x'+crc2.crc);
-        }
+    if (True) {
+        // using CRC extra 
+        var s = new String;
+        crc2.accumulate(''.charCodeAt(decoder.crc_extra));
+    }
 
-        try {
-            var t = jspack.unpack(decoder.fmt, msgbuf.slice(6, -2));
-        }
-        catch (e) {
-            throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' fmt='+decoder.fmt+' payloadLength='+ msgbuf.slice(6, -2).length() +': '+ e.message);
-        }
+    if ( crc != crc2.crc ) {
+        throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ' 0x' +crc+ ' should be 0x'+crc2.crc);
+    }
+*/
 
-        /* org: these parts, I need to see what they're doing before translating.
-        Perhaps are syntatic sugar.
+    // Decode the payload and reorder the fields to match the order map.
+    try {
+        var t = jspack.Unpack(decoder.format, msgbuf.slice(6, -2));
+    }
+    catch (e) {
+        throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' format='+decoder.format+' payloadLength='+ msgbuf.slice(6, -2).length +': '+ e.message);
+    }
 
-        tlist = list(t) ?? does what?
-        
-        # handle sorted fields
-        if (${sort_fields}) {
-            t = tlist[:]
-            for i in range(0, len(tlist)):
-                tlist[i] = t[order_map[i]]
-        }
+    // Reorder the fields to match the order map
+    var args = [];
+    _.each(t, function(e, i, l) {
+        args[ decoder.order_map ] = e;
+    });
 
-        # terminate any strings
-        for i in range(0, len(tlist)):
-            if isinstance(tlist[i], str):
-                tlist[i] = MAVString(tlist[i])
-        t = tuple(tlist)
-        */
+    /* org: these parts, I need to see what they're doing before translating.
+    # terminate any strings
+    for i in range(0, len(tlist)):
+        if isinstance(tlist[i], str):
+            tlist[i] = MAVString(tlist[i])
+    t = tuple(tlist)
+    */
 
-        // construct the message object
-        try {
-            // Unlikely to work.  Will need to build factory.
-            var m = new decoder.type;
-        }
-        catch (e) {
-            throw new Error('Unable to instantiate MAVLink message of type '+decoder.type+' : ' + e.message);
-        }
-        m._msgbuf = msgbuf;
-        m._payload = msgbuf.slice(6, -2);
-        m._crc = crc;
-        m._header = new MAVLink_header(msgId, mlen, seq, srcSystem, srcComponent);
-        return m;
+    // construct the message object
+    try {
+        var m = new decoder.type(args);
+    }
+    catch (e) {
+        throw new Error('Unable to instantiate MAVLink message of type '+decoder.type+' : ' + e.message);
+    }
+    m.msgbuf = msgbuf;
+    m.payload = msgbuf.slice(6, -2);
+    m.crc = crc;
+    m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
+    return m;
 }
 """, xml)
 

@@ -26,12 +26,11 @@ To use MAVLink:
 
 *TODO* Not sure yet how the various different message files will be handled in this environment.
 
-### License ###
+### Development ###
 
-MAVLink is licensed under the terms of the Lesser General Public License of the Free Software Foundation (LGPL). As MAVLink is a header-only library, compiling an application with it is considered "using the libary", not a derived work. MAVLink can therefore be used without limits in any closed-source application without publishing the source code of the closed-source application.
+To run tests, use mocha:
 
-See the *COPYING* file for more info.
+```javascript
+mocha test/
+```
 
-### Credits ###
-
-&copy; 2009-2012 [Lorenz Meier](mailto:mail@qgroundcontrol.org)
