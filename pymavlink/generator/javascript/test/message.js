@@ -70,12 +70,18 @@ describe('MAVLinkMessage', function() {
 
   });
 
+  // need to add tests for the header fields as well, specifying seq etc.
   it('Can decode itself', function() {
 
     var packed = this.heartbeat.pack();
     var m = new mavlink();
     var message = m.decode(packed);
-    message.should.equal(this.heartbeat);
+
+    this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GENERIC);
+    this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA);
+    this.heartbeat.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED);
+    this.heartbeat.custom_mode.should.equal(0);
+    this.heartbeat.system_status.should.equal(mavlink.MAV_STATE_STANDBY);
 
   });
 
