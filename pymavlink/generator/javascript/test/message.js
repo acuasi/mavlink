@@ -77,11 +77,13 @@ describe('MAVLinkMessage', function() {
     var m = new mavlink();
     var message = m.decode(packed);
 
-    message.type.should.equal(mavlink.MAV_TYPE_GENERIC);
-    message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA);
-    message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED);
+    // this.fieldnames = ['type', 'autopilot', 'base_mode', 'custom_mode', 'system_status', 'mavlink_version'];
+    message.type.should.equal(mavlink.MAV_TYPE_GENERIC);  // supposed to be 0
+    message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA); // supposed to be 3
+    message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED); // supposed to be 128
     message.custom_mode.should.equal(0);
-    message.system_status.should.equal(mavlink.MAV_STATE_STANDBY);
+    message.system_status.should.equal(mavlink.MAV_STATE_STANDBY); // supposed to be 3
+    message.mavlink_version.should.equal(0);
 
   });
 

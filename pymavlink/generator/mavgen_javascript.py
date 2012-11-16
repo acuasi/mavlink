@@ -450,7 +450,7 @@ mavlink.prototype.decode = function(msgbuf) {
 
     // Decode the payload and reorder the fields to match the order map.
     try {
-        var t = jspack.Unpack(decoder.format, msgbuf.slice(6, -2));
+        var t = jspack.Unpack(decoder.format, msgbuf.slice(6));
     }
     catch (e) {
         throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' format='+decoder.format+' payloadLength='+ msgbuf.slice(6, -2).length +': '+ e.message);
@@ -459,7 +459,7 @@ mavlink.prototype.decode = function(msgbuf) {
     // Reorder the fields to match the order map
     var args = [];
     _.each(t, function(e, i, l) {
-        args[ decoder.order_map ] = e;
+        args[i] = t[decoder.order_map[i]]
     });
 
     /* org: these parts, I need to see what they're doing before translating.
@@ -473,12 +473,13 @@ mavlink.prototype.decode = function(msgbuf) {
     // construct the message object
     try {
         var m = new decoder.type(args);
+        m.set.call(m, args);
     }
     catch (e) {
         throw new Error('Unable to instantiate MAVLink message of type '+decoder.type+' : ' + e.message);
     }
     m.msgbuf = msgbuf;
-    m.payload = msgbuf.slice(6, -2);
+    m.payload = msgbuf.slice(6);
     m.crc = crc;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
     return m;
