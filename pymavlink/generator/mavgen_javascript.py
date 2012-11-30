@@ -310,7 +310,7 @@ MAVLink.prototype.parseLength = function() {
     
     if( this.buf.length >= 2 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
-        this.expected_length = unpacked[1] + 8;
+        this.expected_length = unpacked[1] + 6; // length of message + header
     }
 
 }
@@ -328,7 +328,7 @@ MAVLink.prototype.parseChar = function(c) {
 MAVLink.prototype.parsePayload = function() {
 
     // If we have enough bytes to try and read it, read it.
-    if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
+    if( this.expected_length >= 6 && this.buf.length >= this.expected_length ) {
 
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
@@ -340,7 +340,7 @@ MAVLink.prototype.parsePayload = function() {
             this.total_packets_received += 1;
         }
         catch(e) {
-            var m = mavlink.messages.bad_data(e.message);
+            var m = new mavlink.messages.bad_data(mbuf, e.message);
             this.total_receive_errors += 1;
         }     
         return m;
@@ -376,7 +376,7 @@ MAVLink.prototype.parseBuffer = function(s) {
 }
 
 /* decode a buffer as a MAVLink message */
-mavlink.prototype.decode = function(msgbuf) {
+MAVLink.prototype.decode = function(msgbuf) {
 
     var magic, mlen, seq, srcSystem, srcComponent, unpacked, msgId;
 
@@ -395,16 +395,18 @@ mavlink.prototype.decode = function(msgbuf) {
     }
 
     if (magic.charCodeAt(0) != 254) {
-        throw new Error("Invalid MAVLink prefix ("+magic+")");
+        throw new Error("Invalid MAVLink prefix ("+magic.charCodeAt(0)+")");
     }
 
     // TODO: this used to be length-8, find out why this works if its 6 instead of 8.
+    // I think this refers to the header, or the way it's calculating its length
+    // when it's encoding/packing itself.
     if( mlen != msgbuf.length - 6 ) {
-        throw new Error("invalid MAVLink message length.  Got " + (msgbuf.length - 8) + " expected " + mlen + ", msgId=" + msgId);
+        throw new Error("Invalid MAVLink message length.  Got " + (msgbuf.length - 6) + " expected " + mlen + ", msgId=" + msgId);
     }
 
     if( false === _.has(mavlink.map, msgId) ) {
-        throw new Error("unknown MAVLink message ID " + msgId);
+        throw new Error("Unknown MAVLink message ID (" + msgId + ")");
     }
 
     // decode the payload
@@ -423,7 +425,8 @@ mavlink.prototype.decode = function(msgbuf) {
 /*
     var crc2 = mavutil.x25crc(msgbuf.slice(1, -2));
 
-    if (True) {
+    // In Python, this was templated in to be 'True'.
+    if (true) {
         // using CRC extra 
         var s = new String;
         crc2.accumulate(''.charCodeAt(decoder.crc_extra));

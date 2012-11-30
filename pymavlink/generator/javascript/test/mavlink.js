@@ -1,5 +1,6 @@
 var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
-  should = require('should');
+  should = require('should'),
+  sinon = require('sinon');
 
 describe("Generated MAVLink protocol handler object", function() {
 
@@ -73,10 +74,10 @@ describe("Generated MAVLink protocol handler object", function() {
   describe("length decoder", function() {
     it("updates the expected length to the size of the expected full message", function() {
       this.m.expected_length.should.equal(6); // default, header size
-      var b = new Buffer([254, 1, 4]); // packet length = 1
+      var b = new Buffer([254, 1]); // packet length = 1
       this.m.pushBuffer(b);
       this.m.parseLength();
-      this.m.expected_length.should.equal(9); // 1+8 bytes for the message ID
+      this.m.expected_length.should.equal(7); // 1+6 bytes for the message header
     });
   });
 
@@ -91,33 +92,44 @@ describe("Generated MAVLink protocol handler object", function() {
 
     it("resets the expected length of the next packet to 6 (header)", function() {
       this.m.pushBuffer(this.heartbeatPayload);
-      this.m.parseLength(); // expected length should now be 9 + 8bytes = 17
-      this.m.expected_length.should.equal(17);
+      this.m.parseLength(); // expected length should now be 9 (message) + 6 bytes (header) = 17
+      this.m.expected_length.should.equal(15);
       this.m.parsePayload();
       this.m.expected_length.should.equal(6);
     });
 
-    it("slices off the length of the message", function() {
+    it("submits a candidate message to the mavlink decode function", function() {
+      
+      var spy = sinon.spy(this.m, 'decode');
+    
       this.m.pushBuffer(this.heartbeatPayload);
-      this.m.parseLength();      
+      this.m.parseLength();
       this.m.parsePayload();
-      this.m.buf.length.should.equal(15); // no idea what this should be yet!
+
+      // could improve this to check the args more closely.
+      // It'd be better but tricky because the type comparison doesn't quite work.
+      spy.called.should.be.true;
     });
 
-    it("throw an exception if a borked message is encountered", function() {
+    it("returns a bad_data message if a borked message is encountered", function() {
       var b = new Buffer([3, 0, 1, 2, 3, 4, 5]); // invalid message
-      (function() { this.m.parsePayload(); }).should.throw('Malformed message encountered: [3, 0, 1, 2, 3, 4, 5]');
+      this.m.pushBuffer(b);
+      var message = this.m.parsePayload();
+      message.should.be.an.instanceof(mavlink.messages.bad_data);      
     });
 
     it("returns a valid mavlink packet if everything is OK", function() {
       this.m.pushBuffer(this.heartbeatPayload);
-      (this.m.parsePayload()).should.be.an.instanceof(mavlink.messages.heartbeat);
+      this.m.parseLength();
+      var message = this.m.parsePayload();
+      message.should.be.an.instanceof(mavlink.messages.heartbeat);
     });
 
     it("increments the total packets received if a good packet is decoded", function() {
       this.m.total_packets_received.should.equal(0);
       this.m.pushBuffer(this.heartbeatPayload);
-      (this.m.parsePayload()).should.be.an.instanceof(mavlink.messages.heartbeat);
+      this.m.parseLength();
+      var message = this.m.parsePayload();
       this.m.total_packets_received.should.equal(1);
     });
   });

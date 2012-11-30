@@ -70,27 +70,61 @@ describe('MAVLink message', function() {
 
   });
 
-  // need to add tests for the header fields as well, specifying seq etc.
-  it('Can decode itself', function() {
+  describe('decode function', function() {
 
-    var packed = this.heartbeat.pack();
-    var m = new mavlink();
-    var message = m.decode(packed);
+    beforeEach(function() {
+      this.m = new MAVLink();
+    });
 
-    // this.fieldnames = ['type', 'autopilot', 'base_mode', 'custom_mode', 'system_status', 'mavlink_version'];
-    message.type.should.equal(mavlink.MAV_TYPE_GENERIC);  // supposed to be 0
-    message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA); // supposed to be 3
-    message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED); // supposed to be 128
-    message.custom_mode.should.equal(0);
-    message.system_status.should.equal(mavlink.MAV_STATE_STANDBY); // supposed to be 3
-    message.mavlink_version.should.equal(0);
+    // need to add tests for the header fields as well, specifying seq etc.
+    it('Can decode itself', function() {
+
+      var packed = this.heartbeat.pack();
+      var message = this.m.decode(packed);
+
+      // this.fieldnames = ['type', 'autopilot', 'base_mode', 'custom_mode', 'system_status', 'mavlink_version'];
+      message.type.should.equal(mavlink.MAV_TYPE_GENERIC);  // supposed to be 0
+      message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA); // supposed to be 3
+      message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED); // supposed to be 128
+      message.custom_mode.should.equal(0);
+      message.system_status.should.equal(mavlink.MAV_STATE_STANDBY); // supposed to be 3
+      message.mavlink_version.should.equal(0);
+
+    });
+
+    it('throws an error if the message has a bad prefix', function() {
+      var packed = [0, 3, 5, 7, 9, 11]; // bad data prefix in header (0, not 254)
+      var m = this.m;
+      (function() { m.decode(packed); }).should.throw('Invalid MAVLink prefix (0)');
+    });
+
+    it('throws an error if the message ID is not known', function() {
+      var packed = [254, 1, 0, 3, 0, 200, 1]; // 200 = invalid ID
+      var m = this.m;
+      (function() { m.decode(packed); }).should.throw('Unknown MAVLink message ID (200)');
+    });
+
+    it('throws an error if the message length is invalid', function() {
+      var packed = [254, 3, 257, 0, 0, 0];
+      var m = this.m;
+      (function() { m.decode(packed); }).should.throw('Invalid MAVLink message length.  Got 0 expected 3, msgId=0');
+    });
+
+    it('throws an error if the CRC cannot be unpacked', function() {
+      
+    });
+
+    it('throws an error if the CRC can not be decoded', function() {
+
+    });
+
+    it('throws an error if it is unable to unpack the payload', function() {
+
+    });
+
+    it('throws an error if it is unable to instantiated a MAVLink message object from the payload', function() {
+
+    });
 
   });
-
-  it('throws an error if the message has a bad prefix', function() {
-    var packed = [0, 1, 2, 3, 4, 5]; // bad data prefix in header (0, not 254)
-    var m = new mavlink();
-    (function() { m.decode(packed); }).should.throw('Bad data packet encountered: [0, 1, 2, 3, 4 5]');
-  })
-
 });
