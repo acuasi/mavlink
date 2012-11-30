@@ -253,43 +253,31 @@ class MAVLink_bad_data(MAVLink_message):
 */
 
 /* MAVLink protocol handling class */
-MAVLink = function(file, srcSystem, srcComponent) {
+MAVLink = function(srcSystem, srcComponent) {
 
     this.seq = 0;
-    this.file = file;
+    this.buf = new Buffer(0);
+   
     this.srcSystem = (typeof srcSystem === 'undefined') ? 0 : srcSystem;
     this.srcComponent =  (typeof srcComponent === 'undefined') ? 0 : srcComponent;
-    
-    // org: this.buf = array.array('B');  -- intent is to have an array of unsigned chars.
-    // Reference: https://developer.mozilla.org/en-US/docs/JavaScript_typed_arrays/ArrayBufferView#Typed_array_subclasses
-    // Not sure what is needed for this, yet.
-    this.buf = new Uint8Array();
 
+    // The first packet we expect is a valid header, 6 bytes.
     this.expected_length = 6;
     this.have_prefix_error = false;
     this.robust_parsing = false;
-    this.protocol_marker = ${protocol_marker};
-    this.little_endian = ${little_endian};
-    this.crc_extra = ${crc_extra};
-    this.sort_fields = ${sort_fields};
+    this.protocol_marker = 254;
+    this.little_endian = true;
+    this.crc_extra = true;
+    this.sort_fields = true;
     this.total_packets_sent = 0;
     this.total_bytes_sent = 0;
     this.total_packets_received = 0;
     this.total_bytes_received = 0;
     this.total_receive_errors = 0;
-    // org: this.startup_time = time.time(); -- not sure how this is used
     this.startup_time = Date.now();
     
-}            
+}
 
-/** org: Because we're in a fully event-driven context, I don't think this is needed.
-        def set_callback(self, callback, *args, **kwargs):
-            self.callback = callback
-            self.callback_args = args
-            self.callback_kwargs = kwargs
-*/
-
-/* Send a MAVLink message */
 mavlink.prototype.send = function(mavmsg) {
         buf = mavmsg.pack(this);
         this.file.write(buf);
@@ -307,41 +295,46 @@ mavlink.prototype.bytes_needed = function() {
 // input some data bytes, possibly returning a new message
 mavlink.prototype.parse_char = function(c) {
 
-    this.buf.push(c);    
+    this.buf = Buffer.concat([this.buf, data]);
     this.total_bytes_received += c.length;
 
-    if( this.buf.length >= 1 && this.buf[0] != ${protocol_marker} ) {
+    // Test for a message prefix.
+    if( this.buf.length >= 1 && this.buf[0] != 254 ) {
 
-            var magic = this.buf[0];
-            this.buf = this.buf.slice(1);
+        // Strip the offending initial byte.
+        var magic = this.buf[0];
+        this.buf = this.buf.slice(1);
 
-            if( this.robust_parsing ) {
-                var m = new MAVLink_bad_data( String.charCodeAt(magic), "Bad prefix" );
-                
-                // Skipping callback implementation found in original code (mavgen_python.py@295)
-                
-                this.expected_length = 6;
-                this.total_receive_errors +=1;
-                return m;
-            }
+        if( this.robust_parsing ) {
+            var m = new MAVLink_bad_data( String.charCodeAt(magic), "Bad prefix" );                
+            this.expected_length = 6;
+            this.total_receive_errors +=1;
+            return m;
+        }
 
-            if( this.have_prefix_error ) {
-                return null;
-            }
+        if( this.have_prefix_error ) {
+            return null;
+        }
 
-            this.have_prefix_error = true;
-            this.total_receive_errors += 1;
-            throw new Error("invalid MAVLink prefix '"+ magic +"'");
+        this.have_prefix_error = true;
+        this.total_receive_errors += 1;
+        throw new Error("invalid MAVLink prefix '"+ magic +"'");
+
     }
+
     this.have_prefix_error = false;
 
+    // Determine the length
     if( this.buf.length >= 2 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
         magic = unpacked[0];
         this.expected_length = unpacked[1] + 8;
     }
 
+    // If we have enough bytes to try and read it, read it.
     if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
+
+        // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
         this.buf = this.buf.slice(this.expected_length);
         this.expected_length = 6;
@@ -361,26 +354,30 @@ mavlink.prototype.parse_char = function(c) {
             var m = this.decode(mbuf);
             this.total_packets_received += 1;
         }
-
-        // Skipping callback implementation found in original code (mavgen_python.py@323)
-
         return m;
     }
+
     return null;
 }
 
 // input some data bytes, possibly returning an array of new messages
-mavlink.prototype.parse_buffer = function(s) {
-    var m = this.parse_char(s);
+mavlink.prototype.parseBuffer = function(s) {
+    
+    // Get a message, if one is available in the stream.
+    var m = this.parseChar(s);
 
+    // No messages available, bail.
     if ( null === m ) {
         return null;
     }
     
+    // While more valid messages can be read from the existing buffer, add
+    // them to the array of new messages and return them.
     var ret = [m];
     while(true) {
-        m = this.parse_char("");
+        m = this.parseChar(''); // empty string to get parseChar to deplete its buffer, if possible.
         if ( null === m ) {
+            // No more messages left.
             return ret;
         }
         ret.push(m);
