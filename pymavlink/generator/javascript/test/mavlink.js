@@ -4,7 +4,7 @@ var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
 describe("Generated MAVLink protocol handler object", function() {
 
   beforeEach(function() {
-    this.m = new MAVLink();
+    this.m = new MAVLink();  
   });
 
   it("has a stream decoder that can decode a stream into an array of MAVLink messages", function() {
@@ -23,7 +23,7 @@ describe("Generated MAVLink protocol handler object", function() {
 
   });
 
-  describe("buffer accumulator", function() {
+  describe("stream buffer accumulator", function() {
 
     it("increments total bytes received", function() {
       this.m.total_bytes_received.should.equal(0);
@@ -43,73 +43,82 @@ describe("Generated MAVLink protocol handler object", function() {
   });
 
   describe("prefix decoder", function() {
-
-    it("sets the have_prefix_error to false if the prefix is OK", function() {
-      this.m.have_prefix_error = true;
-      var b = new Buffer(16);
-      b[0] = 254; // MAVLink magic prefix
-      this.m.pushBuffer(b);
-      this.m.parsePrefix();
-      this.m.have_prefix_error.should.equal(false);
-    });
-
-    it("sets have_prefix_error to true if a prefix error exists", function() {
-      var b = new Buffer(1);
-      b[0] = 1;
-      this.m.pushBuffer(b);
-      (function() { this.m.parsePrefix(); } ); // funny syntax = eat exceptions.  that function throws.
-            
-      this.m.have_prefix_error.should.equal(true);
-
-    });
-
+ 
     it("consumes, unretrievably, the first byte of the buffer, if its a bad prefix", function() {
-      var b = new Buffer(2);
-      b[0] = 1;
-      b[1] = 254;
+
+      var b = new Buffer([1, 254]);
       this.m.pushBuffer(b);
-      (function() { this.m.parsePrefix(); } ); // funny syntax = eat exceptions.  that function throws.
-      this.m.buf.length.should.equal(1);
-      this.m.buf[0].should.equal(254);
+      
+      // eat the exception here.
+      try {
+        this.m.parsePrefix();
+      } catch (e) {
+        this.m.buf.length.should.equal(1);
+        this.m.buf[0].should.equal(254);
+      }
+    
     });
 
-    it("throws an error?? if it gets a bad packet?? why?? TODO check if this is right.", function() {
-      var b = new Buffer(1);
-      b[0] = 1;
-      this.m.pushBuffer(b);
-      (function() { this.m.parsePrefix(); }).should.throw();
-    });
+    it("throws an exception if a malformed prefix is encountered", function() {
 
-    it("returns a mavlink_bad_data packet if robust_parsing is true and a borked packet is encountered", function() {
+      var b = new Buffer([15, 254, 1, 7, 7]); // borked system status packet, invalid
+      this.m.pushBuffer(b);
+      var m = this.m;
+      (function() { m.parsePrefix(); }).should.throw('Bad prefix (15)');
 
     });
 
   });
+
   describe("length decoder", function() {
-    it("updates the expected length to whatever the packet specifies if theres enough data in the buffer to determine that", function() {
-
+    it("updates the expected length to the size of the expected full message", function() {
+      this.m.expected_length.should.equal(6); // default, header size
+      var b = new Buffer([254, 1, 4]); // packet length = 1
+      this.m.pushBuffer(b);
+      this.m.parseLength();
+      this.m.expected_length.should.equal(9); // 1+8 bytes for the message ID
     });
   });
 
-  describe("packet decoder", function() {
-    it("resets the expected length of the next packet to 6 (header)", function() {
+  describe("payload decoder", function() {
+   
+    beforeEach(function() {
 
+      // Valid heartbeat payload
+      this.heartbeatPayload = new Buffer([ 254, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 128, 3, 0 ]);
+    
+    });
+
+    it("resets the expected length of the next packet to 6 (header)", function() {
+      this.m.pushBuffer(this.heartbeatPayload);
+      this.m.parseLength(); // expected length should now be 9 + 8bytes = 17
+      this.m.expected_length.should.equal(17);
+      this.m.parsePayload();
+      this.m.expected_length.should.equal(6);
     });
 
     it("slices off the length of the message", function() {
-
+      this.m.pushBuffer(this.heartbeatPayload);
+      this.m.parseLength();      
+      this.m.parsePayload();
+      this.m.buf.length.should.equal(15); // no idea what this should be yet!
     });
 
-    it("returns a bad_mavlink_data packet if robust parsing is true and a borked packet is encountered", function() {
-
+    it("throw an exception if a borked message is encountered", function() {
+      var b = new Buffer([3, 0, 1, 2, 3, 4, 5]); // invalid message
+      (function() { this.m.parsePayload(); }).should.throw('Malformed message encountered: [3, 0, 1, 2, 3, 4, 5]');
     });
 
     it("returns a valid mavlink packet if everything is OK", function() {
-
+      this.m.pushBuffer(this.heartbeatPayload);
+      (this.m.parsePayload()).should.be.an.instanceof(mavlink.messages.heartbeat);
     });
 
     it("increments the total packets received if a good packet is decoded", function() {
-
+      this.m.total_packets_received.should.equal(0);
+      this.m.pushBuffer(this.heartbeatPayload);
+      (this.m.parsePayload()).should.be.an.instanceof(mavlink.messages.heartbeat);
+      this.m.total_packets_received.should.equal(1);
     });
   });
 

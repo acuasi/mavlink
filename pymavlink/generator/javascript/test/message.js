@@ -29,7 +29,7 @@ describe('MAVLink header', function() {
 
 });
 
-describe('MAVLinkMessage', function() {
+describe('MAVLink message', function() {
 
   beforeEach(function() {
 
@@ -87,5 +87,10 @@ describe('MAVLinkMessage', function() {
 
   });
 
+  it('throws an error if the message has a bad prefix', function() {
+    var packed = [0, 1, 2, 3, 4, 5]; // bad data prefix in header (0, not 254)
+    var m = new mavlink();
+    (function() { m.decode(packed); }).should.throw('Bad data packet encountered: [0, 1, 2, 3, 4 5]');
+  })
 
 });
