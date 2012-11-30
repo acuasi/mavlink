@@ -278,7 +278,7 @@ MAVLink = function(srcSystem, srcComponent) {
     
 }
 
-mavlink.prototype.send = function(mavmsg) {
+MAVLink.prototype.send = function(mavmsg) {
         buf = mavmsg.pack(this);
         this.file.write(buf);
         this.seq = (this.seq + 1) % 255;
@@ -287,17 +287,21 @@ mavlink.prototype.send = function(mavmsg) {
 }
 
 // return number of bytes needed for next parsing stage
-mavlink.prototype.bytes_needed = function() {
+MAVLink.prototype.bytes_needed = function() {
     ret = this.expected_length - this.buf.length;
     return ( ret <= 0 ) ? 1 : ret;
 }
 
-// input some data bytes, possibly returning a new message
-mavlink.prototype.parse_char = function(c) {
+// add data to the local buffer
+MAVLink.prototype.pushBuffer = function(data) {
+    if(data) {
+        this.buf = Buffer.concat([this.buf, data]);
+        this.total_bytes_received += data.length;
+    }
+}
 
-    this.buf = Buffer.concat([this.buf, data]);
-    this.total_bytes_received += c.length;
-
+// decode prefix
+MAVLink.prototype.parsePrefix = function() {
     // Test for a message prefix.
     if( this.buf.length >= 1 && this.buf[0] != 254 ) {
 
@@ -323,13 +327,33 @@ mavlink.prototype.parse_char = function(c) {
     }
 
     this.have_prefix_error = false;
+}
 
-    // Determine the length
+// Determine the length
+MAVLink.prototype.parseLength = function() {
+    
     if( this.buf.length >= 2 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
+
+        // TODO: what's this next line for? not used, dead line or mistranslation?
         magic = unpacked[0];
+        
         this.expected_length = unpacked[1] + 8;
     }
+
+}
+
+// input some data bytes, possibly returning a new message
+MAVLink.prototype.parseChar = function(c) {
+
+    this.pushBuffer(c);
+    this.parsePrefix();
+    this.parseLength();
+    return this.parsePayload();
+
+}
+
+MAVLink.prototype.parsePayload = function() {
 
     // If we have enough bytes to try and read it, read it.
     if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
@@ -361,7 +385,7 @@ mavlink.prototype.parse_char = function(c) {
 }
 
 // input some data bytes, possibly returning an array of new messages
-mavlink.prototype.parseBuffer = function(s) {
+MAVLink.prototype.parseBuffer = function(s) {
     
     // Get a message, if one is available in the stream.
     var m = this.parseChar(s);
