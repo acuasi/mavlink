@@ -24,7 +24,8 @@ Note: this file has been auto-generated. DO NOT EDIT
 
 jspack = require("../lib/node-jspack-master/jspack.js").jspack,
     mavutil = require("../lib/mavutil.js"),
-    _ = require("underscore");
+    _ = require("underscore"),
+    w = require("winston");
 
 mavlink = function(){};
 
@@ -299,7 +300,7 @@ MAVLink.prototype.parsePrefix = function() {
         this.buf = this.buf.slice(1);
         this.expected_length = 6;
         this.total_receive_errors +=1;
-        throw new Error("Bad prefix ("+badPrefix+")");
+  //      throw new Error("Bad prefix ("+badPrefix+")");
 
     }
 
@@ -318,10 +319,23 @@ MAVLink.prototype.parseLength = function() {
 // input some data bytes, possibly returning a new message
 MAVLink.prototype.parseChar = function(c) {
 
-    this.pushBuffer(c);
-    this.parsePrefix();
-    this.parseLength();
-    return this.parsePayload();
+    var m;
+    try {
+
+        this.pushBuffer(c);
+        this.parsePrefix();
+        this.parseLength();
+        m = this.parsePayload();
+
+    } catch(e) {
+
+        w.info("Got a bad data message ("+e.message+")");
+        this.total_receive_errors += 1;
+        m = new mavlink.messages.bad_data(this.buf, e.message);
+        
+    }
+
+    return m;
 
 }
 
@@ -329,21 +343,20 @@ MAVLink.prototype.parsePayload = function() {
 
     // If we have enough bytes to try and read it, read it.
     if( this.expected_length >= 6 && this.buf.length >= this.expected_length ) {
-
+        
+        
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
+
+        w.info("Attempting to parse packet, message candidate buffer is ["+mbuf+"]");
+
         this.buf = this.buf.slice(this.expected_length);
         this.expected_length = 6;
 
-        try {
-            var m = this.decode(mbuf);
-            this.total_packets_received += 1;
-        }
-        catch(e) {
-            var m = new mavlink.messages.bad_data(mbuf, e.message);
-            this.total_receive_errors += 1;
-        }     
+        var m = this.decode(mbuf);
+        this.total_packets_received += 1;
         return m;
+
     }
 
     return null;
@@ -364,7 +377,7 @@ MAVLink.prototype.parseBuffer = function(s) {
     // them to the array of new messages and return them.
     var ret = [m];
     while(true) {
-        m = this.parseChar(''); // empty string to get parseChar to deplete its buffer, if possible.
+        m = this.parseChar();
         if ( null === m ) {
             // No more messages left.
             return ret;
@@ -471,6 +484,9 @@ MAVLink.prototype.decode = function(msgbuf) {
     m.payload = msgbuf.slice(6);
     m.crc = crc;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
+
+    w.info("Successful decode of message type "+m.name);
+
     return m;
 }
 """, xml)

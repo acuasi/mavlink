@@ -1,6 +1,11 @@
 var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
   should = require('should'),
-  sinon = require('sinon');
+  sinon = require('sinon'),
+  fs = require('fs');
+
+// Actual data stream taken from APM.
+global.fixtures = global.fixtures || {};
+global.fixtures.serialStream = fs.readFileSync("javascript/test/serial-data-fixture");
 
 describe("Generated MAVLink protocol handler object", function() {
 
@@ -9,7 +14,9 @@ describe("Generated MAVLink protocol handler object", function() {
   });
 
   it("has a stream decoder that can decode a stream into an array of MAVLink messages", function() {
-  
+    this.m.pushBuffer(global.fixtures.serialStream);
+    var messages = this.m.parseBuffer();
+    console.log(messages);
   });
 
   describe("buffer decoder", function() {
