@@ -5,7 +5,8 @@ var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};
-global.fixtures.serialStream = fs.readFileSync("javascript/test/serial-data-fixture");
+global.fixtures.serialStream = fs.readFileSync("javascript/test/serial-subset-data-fixture");
+//global.fixtures.heartbeatBinaryStream = fs.readFileSync("javascript/test/heartbeat-data-fixture");
 
 describe("Generated MAVLink protocol handler object", function() {
 
@@ -13,10 +14,19 @@ describe("Generated MAVLink protocol handler object", function() {
     this.m = new MAVLink();  
   });
 
-  it("has a stream decoder that can decode a stream into an array of MAVLink messages", function() {
-    this.m.pushBuffer(global.fixtures.serialStream);
-    var messages = this.m.parseBuffer();
-    console.log(messages);
+  describe("stream decoder", function() {
+
+    it("decodes a binary stream representation of a single message correctly", function() {
+      this.m.pushBuffer(global.fixtures.heartbeatBinaryStream);
+      var messages = this.m.parseBuffer();
+    });
+
+    // This test includes a "noisy" signal, with non-mavlink data/messages/noise.
+    it("decodes a real serial binary stream into an array of MAVLink messages", function() {
+      this.m.pushBuffer(global.fixtures.serialStream);
+      var messages = this.m.parseBuffer();
+    });
+
   });
 
   describe("buffer decoder", function() {
@@ -84,7 +94,7 @@ describe("Generated MAVLink protocol handler object", function() {
       var b = new Buffer([254, 1]); // packet length = 1
       this.m.pushBuffer(b);
       this.m.parseLength();
-      this.m.expected_length.should.equal(7); // 1+6 bytes for the message header
+      this.m.expected_length.should.equal(9); // 1+8 bytes for the message header
     });
   });
 
@@ -93,14 +103,14 @@ describe("Generated MAVLink protocol handler object", function() {
     beforeEach(function() {
 
       // Valid heartbeat payload
-      this.heartbeatPayload = new Buffer([ 254, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 128, 3, 0 ]);
+      this.heartbeatPayload = new Buffer([ 254, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 128, 3, 0, 243, 215 ]);
     
     });
 
     it("resets the expected length of the next packet to 6 (header)", function() {
       this.m.pushBuffer(this.heartbeatPayload);
-      this.m.parseLength(); // expected length should now be 9 (message) + 6 bytes (header) = 17
-      this.m.expected_length.should.equal(15);
+      this.m.parseLength(); // expected length should now be 9 (message) + 8 bytes (header) = 17
+      this.m.expected_length.should.equal(17);
       this.m.parsePayload();
       this.m.expected_length.should.equal(6);
     });
@@ -116,6 +126,7 @@ describe("Generated MAVLink protocol handler object", function() {
       // could improve this to check the args more closely.
       // It'd be better but tricky because the type comparison doesn't quite work.
       spy.called.should.be.true;
+
     });
 
     it("returns a bad_data message if a borked message is encountered", function() {

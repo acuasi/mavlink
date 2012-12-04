@@ -27,6 +27,11 @@ jspack = require("../lib/node-jspack-master/jspack.js").jspack,
     _ = require("underscore"),
     w = require("winston");
 
+// Add a convenience method to Buffer
+Buffer.prototype.toByteArray = function () {
+  return Array.prototype.slice.call(this, 0)
+}
+
 mavlink = function(){};
 
 mavlink.WIRE_PROTOCOL_VERSION = "${WIRE_PROTOCOL_VERSION}";
@@ -76,10 +81,7 @@ mavlink.message.prototype.pack = function(crc_extra, payload) {
     this.payload = payload;
     this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);    
     this.msgbuf = this.header.pack().concat(payload);
-
-    //org:todo: May need to slice msgbuf, not sure yet
-    //        crc = mavutil.x25crc(self._msgbuf[1:])
-    this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25crc(this.msgbuf) ] ) );
+    this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25Crc(this.msgbuf.slice(1)) ] ) );
     return this.msgbuf;
 
 }
@@ -252,10 +254,12 @@ MAVLink = function(srcSystem, srcComponent) {
 
     // The first packet we expect is a valid header, 6 bytes.
     this.expected_length = 6;
+
     this.have_prefix_error = false;
-    this.robust_parsing = false;
+
     this.protocol_marker = 254;
     this.little_endian = true;
+
     this.crc_extra = true;
     this.sort_fields = true;
     this.total_packets_sent = 0;
@@ -300,7 +304,7 @@ MAVLink.prototype.parsePrefix = function() {
         this.buf = this.buf.slice(1);
         this.expected_length = 6;
         this.total_receive_errors +=1;
-  //      throw new Error("Bad prefix ("+badPrefix+")");
+        throw new Error("Bad prefix ("+badPrefix+")");
 
     }
 
@@ -311,7 +315,7 @@ MAVLink.prototype.parseLength = function() {
     
     if( this.buf.length >= 2 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
-        this.expected_length = unpacked[1] + 6; // length of message + header
+        this.expected_length = unpacked[1] + 8; // length of message + header
     }
 
 }
@@ -329,7 +333,7 @@ MAVLink.prototype.parseChar = function(c) {
 
     } catch(e) {
 
-        w.info("Got a bad data message ("+e.message+")");
+       // w.info("Got a bad data message ("+e.message+")");
         this.total_receive_errors += 1;
         m = new mavlink.messages.bad_data(this.buf, e.message);
         
@@ -344,22 +348,32 @@ MAVLink.prototype.parsePayload = function() {
     // If we have enough bytes to try and read it, read it.
     if( this.expected_length >= 6 && this.buf.length >= this.expected_length ) {
         
-        
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
 
-        w.info("Attempting to parse packet, message candidate buffer is ["+mbuf+"]");
+        w.info("Attempting to parse packet, message candidate buffer is ["+mbuf.toByteArray()+"]");
 
-        this.buf = this.buf.slice(this.expected_length);
-        this.expected_length = 6;
+        try {
+            var m = this.decode(mbuf);
+            this.total_packets_received += 1;
+            this.buf = this.buf.slice(this.expected_length);
+            this.expected_length = 6;
+            return m;
+        } catch(e) {
 
-        var m = this.decode(mbuf);
-        this.total_packets_received += 1;
-        return m;
-
+            // In this case, we thought we'd have a valid packet, but
+            // didn't.  It could be that the packet was structurally present
+            // but malformed, or, it could be that random line noise
+            // made this look like a packet.  Consume the first symbol in the buffer and continue parsing.
+            this.buf = this.buf.slice(1);
+            this.expected_length = 6;
+            w.info(e);
+            // bubble
+            throw e;
+        }
     }
-
     return null;
+
 }
 
 // input some data bytes, possibly returning an array of new messages
@@ -414,8 +428,8 @@ MAVLink.prototype.decode = function(msgbuf) {
     // TODO: this used to be length-8, find out why this works if its 6 instead of 8.
     // I think this refers to the header, or the way it's calculating its length
     // when it's encoding/packing itself.
-    if( mlen != msgbuf.length - 6 ) {
-        throw new Error("Invalid MAVLink message length.  Got " + (msgbuf.length - 6) + " expected " + mlen + ", msgId=" + msgId);
+    if( mlen != msgbuf.length - 8 ) {
+        throw new Error("Invalid MAVLink message length.  Got " + (msgbuf.length - 8) + " expected " + mlen + ", msgId=" + msgId);
     }
 
     if( false === _.has(mavlink.map, msgId) ) {
@@ -428,27 +442,19 @@ MAVLink.prototype.decode = function(msgbuf) {
 
     // decode the checksum
     try {
-        var crc = jspack.Unpack('<H', msgbuf.slice(-2));
+        var crc = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2));
+        crc = crc[0];
     }   
     catch (e) {
         throw new Error("Unable to unpack MAVLink CRC: " + e.message);
     }
 
-    // This part isn't correct yet.
-/*
-    var crc2 = mavutil.x25crc(msgbuf.slice(1, -2));
-
-    // In Python, this was templated in to be 'True'.
-    if (true) {
-        // using CRC extra 
-        var s = new String;
-        crc2.accumulate(''.charCodeAt(decoder.crc_extra));
-    }
-
-    if ( crc != crc2.crc ) {
-        throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ' 0x' +crc+ ' should be 0x'+crc2.crc);
-    }
-*/
+    var crc2 = mavutil.x25Crc(msgbuf.slice(1, msgbuf.length -2));
+    crc2 = mavutil.x25Crc(''.charCodeAt(decoder.crc_extra), crc2);
+    /*
+    if ( crc != crc2 ) {
+        throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ', 0x' + crc.toString(16) + ' should be 0x'+crc2.toString(16) );
+    }*/
 
     // Decode the payload and reorder the fields to match the order map.
     try {
@@ -463,14 +469,6 @@ MAVLink.prototype.decode = function(msgbuf) {
     _.each(t, function(e, i, l) {
         args[i] = t[decoder.order_map[i]]
     });
-
-    /* org: these parts, I need to see what they're doing before translating.
-    # terminate any strings
-    for i in range(0, len(tlist)):
-        if isinstance(tlist[i], str):
-            tlist[i] = MAVString(tlist[i])
-    t = tuple(tlist)
-    */
 
     // construct the message object
     try {
