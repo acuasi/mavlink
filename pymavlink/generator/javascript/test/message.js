@@ -65,7 +65,9 @@ describe('MAVLink message', function() {
       mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
       mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
       mavlink.MAV_STATE_STANDBY,
-      0 // not sure, this is supposed to be auto-added?
+      0, // not sure, this is supposed to be auto-added?
+      254, // CRC
+      123 // CRC
       ]);
 
   });

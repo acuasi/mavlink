@@ -24,8 +24,7 @@ Note: this file has been auto-generated. DO NOT EDIT
 
 jspack = require("../lib/node-jspack-master/jspack.js").jspack,
     mavutil = require("../lib/mavutil.js"),
-    _ = require("underscore"),
-    w = require("winston");
+    _ = require("underscore");
 
 // Add a convenience method to Buffer
 Buffer.prototype.toByteArray = function () {
@@ -81,7 +80,7 @@ mavlink.message.prototype.pack = function(crc_extra, payload) {
     this.payload = payload;
     this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);    
     this.msgbuf = this.header.pack().concat(payload);
-    this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25Crc(this.msgbuf.slice(1)) ] ) );
+    this.msgbuf = this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25Crc(this.msgbuf.slice(1)) ] ) );
     return this.msgbuf;
 
 }
@@ -351,14 +350,16 @@ MAVLink.prototype.parsePayload = function() {
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
 
-        w.info("Attempting to parse packet, message candidate buffer is ["+mbuf.toByteArray()+"]");
+       // w.info("Attempting to parse packet, message candidate buffer is ["+mbuf.toByteArray()+"]");
 
         try {
+
             var m = this.decode(mbuf);
             this.total_packets_received += 1;
             this.buf = this.buf.slice(this.expected_length);
             this.expected_length = 6;
             return m;
+
         } catch(e) {
 
             // In this case, we thought we'd have a valid packet, but
@@ -367,7 +368,10 @@ MAVLink.prototype.parsePayload = function() {
             // made this look like a packet.  Consume the first symbol in the buffer and continue parsing.
             this.buf = this.buf.slice(1);
             this.expected_length = 6;
-            w.info(e);
+            
+            // Log.
+            //w.info(e);
+
             // bubble
             throw e;
         }
@@ -483,7 +487,7 @@ MAVLink.prototype.decode = function(msgbuf) {
     m.crc = crc;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
 
-    w.info("Successful decode of message type "+m.name);
+  //  w.info("Successful decode of message type "+m.name);
 
     return m;
 }
