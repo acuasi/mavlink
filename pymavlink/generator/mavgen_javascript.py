@@ -24,7 +24,9 @@ Note: this file has been auto-generated. DO NOT EDIT
 
 jspack = require("../lib/node-jspack-master/jspack.js").jspack,
     mavutil = require("../lib/mavutil.js"),
-    _ = require("underscore");
+    _ = require("underscore"),
+    events = require("events"),
+    util = require("util");
 
 // Add a convenience method to Buffer
 Buffer.prototype.toByteArray = function () {
@@ -222,19 +224,6 @@ def generate_mavlink_class(outf, msgs, xml):
     
     t.write(outf, """
 
-/** org: This is only used in one place, I think, and should be inlined there.  Leaving it here as remenant until
-that coding is done.
-class MAVString(str):
-        '''NUL terminated string'''
-        def __init__(self, s):
-                str.__init__(self)
-        def __str__(self):
-            i = self.find(chr(0))
-            if i == -1:
-                return self[:]
-            return self[0:i]
-*/
-
 // Special mavlink message to capture malformed data packets for debugging
 mavlink.messages.bad_data = function(data, reason) {
     this.id = mavlink.MAVLINK_MSG_ID_BAD_DATA;
@@ -269,6 +258,9 @@ MAVLink = function(srcSystem, srcComponent) {
     this.startup_time = Date.now();
     
 }
+
+// Implements EventEmitter
+util.inherits(MAVLink, events.EventEmitter);
 
 MAVLink.prototype.send = function(mavmsg) {
         buf = mavmsg.pack(this);
@@ -350,7 +342,7 @@ MAVLink.prototype.parsePayload = function() {
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
 
-       // w.info("Attempting to parse packet, message candidate buffer is ["+mbuf.toByteArray()+"]");
+        // w.info("Attempting to parse packet, message candidate buffer is ["+mbuf.toByteArray()+"]");
 
         try {
 
@@ -358,6 +350,7 @@ MAVLink.prototype.parsePayload = function() {
             this.total_packets_received += 1;
             this.buf = this.buf.slice(this.expected_length);
             this.expected_length = 6;
+            this.emit('message', m);
             return m;
 
         } catch(e) {

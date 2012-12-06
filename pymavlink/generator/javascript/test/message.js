@@ -66,8 +66,8 @@ describe('MAVLink message', function() {
       mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
       mavlink.MAV_STATE_STANDBY,
       0, // not sure, this is supposed to be auto-added?
-      254, // CRC
-      123 // CRC
+      85, // CRC
+      196 // CRC
       ]);
 
   });
@@ -101,13 +101,13 @@ describe('MAVLink message', function() {
     });
 
     it('throws an error if the message ID is not known', function() {
-      var packed = [254, 1, 0, 3, 0, 200, 1]; // 200 = invalid ID
+      var packed = [254, 1, 0, 3, 0, 200, 1, 0, 0]; // 200 = invalid ID
       var m = this.m;
       (function() { m.decode(packed); }).should.throw('Unknown MAVLink message ID (200)');
     });
 
     it('throws an error if the message length is invalid', function() {
-      var packed = [254, 3, 257, 0, 0, 0];
+      var packed = [254, 3, 257, 0, 0, 0, 0, 0];
       var m = this.m;
       (function() { m.decode(packed); }).should.throw('Invalid MAVLink message length.  Got 0 expected 3, msgId=0');
     });
@@ -124,7 +124,7 @@ describe('MAVLink message', function() {
 
     });
 
-    it('throws an error if it is unable to instantiated a MAVLink message object from the payload', function() {
+    it('throws an error if it is unable to instantiate a MAVLink message object from the payload', function() {
 
     });
 
