@@ -24,7 +24,7 @@ describe('MAVLink header', function() {
   })
 
   it('Can pack itself', function() {
-    this.h.pack().should.eql([254, 1, 2, 3,4, 147]);
+    this.h.pack().should.eql([254, 1, 2, 3, 4, 147]);
   });
 
 });

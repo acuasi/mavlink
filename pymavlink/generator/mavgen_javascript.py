@@ -232,7 +232,9 @@ mavlink.messages.bad_data = function(data, reason) {
 }
 
 /* MAVLink protocol handling class */
-MAVLink = function(srcSystem, srcComponent) {
+MAVLink = function(logger, srcSystem, srcComponent) {
+
+    this.logger = logger;
 
     this.seq = 0;
     this.buf = new Buffer(0);
@@ -262,6 +264,14 @@ MAVLink = function(srcSystem, srcComponent) {
 // Implements EventEmitter
 util.inherits(MAVLink, events.EventEmitter);
 
+// If the logger exists, this function will add a message to it.
+// Assumes the logger is a winston object.
+MAVLink.prototype.log = function(message) {
+    if(this.logger) {
+        this.logger.info(message);
+    }
+}
+
 MAVLink.prototype.send = function(mavmsg) {
         buf = mavmsg.pack(this);
         this.file.write(buf);
@@ -284,7 +294,7 @@ MAVLink.prototype.pushBuffer = function(data) {
     }
 }
 
-// decode prefix
+// Decode prefix.  Elides
 MAVLink.prototype.parsePrefix = function() {
 
     // Test for a message prefix.
@@ -301,12 +311,15 @@ MAVLink.prototype.parsePrefix = function() {
 
 }
 
-// Determine the length
+// Determine the length.  Leaves buffer untouched.
 MAVLink.prototype.parseLength = function() {
     
     if( this.buf.length >= 2 ) {
-        var unpacked = jspack.Unpack('BB', this.buf.slice(0, 2));
-        this.expected_length = unpacked[1] + 8; // length of message + header
+        var unpacked = jspack.Unpack('BB', this.buf.slice(1, 3));
+        this.log('<<< Determining packet length');
+        this.log(unpacked);
+        this.expected_length = unpacked[0] + 8; // length of message + header + CRC
+        this.log("Setting expected length to " + this.expected_length);
     }
 
 }
@@ -337,8 +350,8 @@ MAVLink.prototype.parseChar = function(c) {
 MAVLink.prototype.parsePayload = function() {
 
     // If we have enough bytes to try and read it, read it.
-    if( this.expected_length >= 6 && this.buf.length >= this.expected_length ) {
-        
+    if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
+
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
 
@@ -418,13 +431,18 @@ MAVLink.prototype.decode = function(msgbuf) {
         throw new Error('Unable to unpack MAVLink header: ' + e.message);
     }
 
+    this.log('Length = ' + this.expected_length);
+    this.log('Header:');
+    this.log(unpacked);
+    this.log('Candidate packet ID: '+msgId);
+    this.log('Seq: '+seq);
+    this.log('Packet mlen: '+mlen);
+    this.log('---------------------');
+
     if (magic.charCodeAt(0) != 254) {
         throw new Error("Invalid MAVLink prefix ("+magic.charCodeAt(0)+")");
     }
 
-    // TODO: this used to be length-8, find out why this works if its 6 instead of 8.
-    // I think this refers to the header, or the way it's calculating its length
-    // when it's encoding/packing itself.
     if( mlen != msgbuf.length - 8 ) {
         throw new Error("Invalid MAVLink message length.  Got " + (msgbuf.length - 8) + " expected " + mlen + ", msgId=" + msgId);
     }
@@ -439,7 +457,7 @@ MAVLink.prototype.decode = function(msgbuf) {
 
     // decode the checksum
     try {
-        var crc = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2));
+        var crc = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2, msgbuf.length));
         crc = crc[0];
     }   
     catch (e) {
@@ -455,7 +473,9 @@ MAVLink.prototype.decode = function(msgbuf) {
 
     // Decode the payload and reorder the fields to match the order map.
     try {
-        var t = jspack.Unpack(decoder.format, msgbuf.slice(6));
+        var t = jspack.Unpack(decoder.format, msgbuf.slice(6, msgbuf.length));
+        this.log('Raw unpacked');
+        this.log(t);
     }
     catch (e) {
         throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' format='+decoder.format+' payloadLength='+ msgbuf.slice(6, -2).length +': '+ e.message);
@@ -466,6 +486,7 @@ MAVLink.prototype.decode = function(msgbuf) {
     _.each(t, function(e, i, l) {
         args[i] = t[decoder.order_map[i]]
     });
+    this.log(decoder.order_map);
 
     // construct the message object
     try {
@@ -479,9 +500,7 @@ MAVLink.prototype.decode = function(msgbuf) {
     m.payload = msgbuf.slice(6);
     m.crc = crc;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
-
-  //  w.info("Successful decode of message type "+m.name);
-
+    this.log(m);
     return m;
 }
 """, xml)

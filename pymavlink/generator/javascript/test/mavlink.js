@@ -5,7 +5,7 @@ var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};
-global.fixtures.serialStream = fs.readFileSync("javascript/test/serial-subset-data-fixture");
+global.fixtures.serialStream = fs.readFileSync("javascript/test/capture.mavlink");
 //global.fixtures.heartbeatBinaryStream = fs.readFileSync("javascript/test/heartbeat-data-fixture");
 
 describe("Generated MAVLink protocol handler object", function() {
@@ -14,18 +14,20 @@ describe("Generated MAVLink protocol handler object", function() {
     this.m = new MAVLink();
   });
 
-  describe.skip("stream decoder", function() {
+  describe("stream decoder", function() {
 
     // This test prepopulates a single message as a binary buffer.
     it("decodes a binary stream representation of a single message correctly", function() {
       this.m.pushBuffer(global.fixtures.heartbeatBinaryStream);
       var messages = this.m.parseBuffer();
+      
     });
 
     // This test includes a "noisy" signal, with non-mavlink data/messages/noise.
     it("decodes a real serial binary stream into an array of MAVLink messages", function() {
       this.m.pushBuffer(global.fixtures.serialStream);
       var messages = this.m.parseBuffer();
+
     });
 
   });
