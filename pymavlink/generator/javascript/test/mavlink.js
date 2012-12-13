@@ -1,7 +1,14 @@
 var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
   should = require('should'),
   sinon = require('sinon'),
-  fs = require('fs');
+  fs = require('fs'),
+  winston = require('winston');
+
+var logger = new (winston.Logger)({
+  transports: [
+    new (winston.transports.File)({ filename: 'console.log' })
+  ]
+});
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};
@@ -11,7 +18,7 @@ global.fixtures.serialStream = fs.readFileSync("javascript/test/capture.mavlink"
 describe("Generated MAVLink protocol handler object", function() {
 
   beforeEach(function() {
-    this.m = new MAVLink();
+    this.m = new MAVLink(logger);
   });
 
   describe("stream decoder", function() {
@@ -27,7 +34,7 @@ describe("Generated MAVLink protocol handler object", function() {
     it("decodes a real serial binary stream into an array of MAVLink messages", function() {
       this.m.pushBuffer(global.fixtures.serialStream);
       var messages = this.m.parseBuffer();
-
+      logger.log(messages);
     });
 
   });
@@ -94,7 +101,7 @@ describe("Generated MAVLink protocol handler object", function() {
   describe("length decoder", function() {
     it("updates the expected length to the size of the expected full message", function() {
       this.m.expected_length.should.equal(6); // default, header size
-      var b = new Buffer([254, 1]); // packet length = 1
+      var b = new Buffer([254, 1, 1]); // packet length = 1
       this.m.pushBuffer(b);
       this.m.parseLength();
       this.m.expected_length.should.equal(9); // 1+8 bytes for the message header

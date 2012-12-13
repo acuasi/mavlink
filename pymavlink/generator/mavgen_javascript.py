@@ -314,12 +314,9 @@ MAVLink.prototype.parsePrefix = function() {
 // Determine the length.  Leaves buffer untouched.
 MAVLink.prototype.parseLength = function() {
     
-    if( this.buf.length >= 2 ) {
+    if( this.buf.length >= 3 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(1, 3));
-        this.log('<<< Determining packet length');
-        this.log(unpacked);
         this.expected_length = unpacked[0] + 8; // length of message + header + CRC
-        this.log("Setting expected length to " + this.expected_length);
     }
 
 }
@@ -431,14 +428,6 @@ MAVLink.prototype.decode = function(msgbuf) {
         throw new Error('Unable to unpack MAVLink header: ' + e.message);
     }
 
-    this.log('Length = ' + this.expected_length);
-    this.log('Header:');
-    this.log(unpacked);
-    this.log('Candidate packet ID: '+msgId);
-    this.log('Seq: '+seq);
-    this.log('Packet mlen: '+mlen);
-    this.log('---------------------');
-
     if (magic.charCodeAt(0) != 254) {
         throw new Error("Invalid MAVLink prefix ("+magic.charCodeAt(0)+")");
     }
@@ -474,8 +463,6 @@ MAVLink.prototype.decode = function(msgbuf) {
     // Decode the payload and reorder the fields to match the order map.
     try {
         var t = jspack.Unpack(decoder.format, msgbuf.slice(6, msgbuf.length));
-        this.log('Raw unpacked');
-        this.log(t);
     }
     catch (e) {
         throw new Error('Unable to unpack MAVLink payload type='+decoder.type+' format='+decoder.format+' payloadLength='+ msgbuf.slice(6, -2).length +': '+ e.message);
@@ -486,7 +473,6 @@ MAVLink.prototype.decode = function(msgbuf) {
     _.each(t, function(e, i, l) {
         args[i] = t[decoder.order_map[i]]
     });
-    this.log(decoder.order_map);
 
     // construct the message object
     try {

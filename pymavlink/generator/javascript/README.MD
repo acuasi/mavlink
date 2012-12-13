@@ -28,9 +28,15 @@ To use MAVLink:
 
 ### Development ###
 
-To run tests, use mocha:
+To run tests, use the makefile in the parent directory (mavlink/pymavlink/generator/):
 
-```javascript
-mocha test/
+```bash
+make -f javascriptMakefile test
+```
+
+Specific instructions for generating Jenkins-friendly output is done through the makefile as well:
+
+```bash
+make -f javascriptMakefile ci
 ```
 
