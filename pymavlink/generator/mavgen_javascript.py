@@ -202,8 +202,8 @@ def mavfmt(field):
         'uint16_t' : 'H',
         'int32_t'  : 'i',
         'uint32_t' : 'I',
-        'int64_t'  : 'q',
-        'uint64_t' : 'Q',
+        'int64_t'  : 'd',
+        'uint64_t' : 'd',
         }
 
     if field.array_length:
