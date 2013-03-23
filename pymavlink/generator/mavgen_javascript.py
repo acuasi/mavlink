@@ -448,20 +448,6 @@ MAVLink.prototype.decode = function(msgbuf) {
     // refs: (fmt, type, order_map, crc_extra) = mavlink.map[msgId]
     var decoder = mavlink.map[msgId];
 
-
-/*
-                # decode the checksum
-                try:
-                    crc, = struct.unpack('<H', msgbuf[-2:])
-                except struct.error as emsg:
-                    raise MAVError('Unable to unpack MAVLink CRC: %s' % emsg)
-                crc2 = mavutil.x25crc(msgbuf[1:-2])
-                if True: # using CRC extra 
-                    crc2.accumulate(chr(crc_extra))
-                if crc != crc2.crc:
-                    raise MAVError('invalid MAVLink CRC in msgID %u 0x%04x should be 0x%04x' % (msgId, crc, crc2.crc))
-*/
-
     // decode the checksum
     try {
         var receivedChecksum = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2));
