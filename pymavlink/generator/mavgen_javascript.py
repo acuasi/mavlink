@@ -82,7 +82,11 @@ mavlink.message.prototype.pack = function(crc_extra, payload) {
     this.payload = payload;
     this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);    
     this.msgbuf = this.header.pack().concat(payload);
-    this.msgbuf = this.msgbuf.concat(jspack.Pack('<H', [ mavutil.x25Crc(this.msgbuf.slice(1)) ] ) );
+    var crc = mavutil.x25Crc(this.msgbuf.slice(1));
+
+    // For now, assume always using crc_extra = True.  TODO: check/fix this.
+    crc = mavutil.x25Crc([crc_extra], crc);
+    this.msgbuf = this.msgbuf.concat(jspack.Pack('<H', [crc] ) );
     return this.msgbuf;
 
 }
@@ -294,7 +298,7 @@ MAVLink.prototype.pushBuffer = function(data) {
     }
 }
 
-// Decode prefix.  Elides
+// Decode prefix.  Elides the prefix.
 MAVLink.prototype.parsePrefix = function() {
 
     // Test for a message prefix.
@@ -444,21 +448,35 @@ MAVLink.prototype.decode = function(msgbuf) {
     // refs: (fmt, type, order_map, crc_extra) = mavlink.map[msgId]
     var decoder = mavlink.map[msgId];
 
+
+/*
+                # decode the checksum
+                try:
+                    crc, = struct.unpack('<H', msgbuf[-2:])
+                except struct.error as emsg:
+                    raise MAVError('Unable to unpack MAVLink CRC: %s' % emsg)
+                crc2 = mavutil.x25crc(msgbuf[1:-2])
+                if True: # using CRC extra 
+                    crc2.accumulate(chr(crc_extra))
+                if crc != crc2.crc:
+                    raise MAVError('invalid MAVLink CRC in msgID %u 0x%04x should be 0x%04x' % (msgId, crc, crc2.crc))
+*/
+
     // decode the checksum
     try {
-        var crc = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2, msgbuf.length));
-        crc = crc[0];
-    }   
-    catch (e) {
+        var receivedChecksum = jspack.Unpack('<H', msgbuf.slice(msgbuf.length - 2));
+    } catch (e) {
         throw new Error("Unable to unpack MAVLink CRC: " + e.message);
     }
 
-    var crc2 = mavutil.x25Crc(msgbuf.slice(1, msgbuf.length -2));
-    crc2 = mavutil.x25Crc(''.charCodeAt(decoder.crc_extra), crc2);
-    /*
-    if ( crc != crc2 ) {
-        throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ', 0x' + crc.toString(16) + ' should be 0x'+crc2.toString(16) );
-    }*/
+    var messageChecksum = mavutil.x25Crc(msgbuf.slice(1, msgbuf.length - 2));
+
+    // Assuming using crc_extra = True.  See the message.prototype.pack() function.
+    messageChecksum = mavutil.x25Crc([decoder.crc_extra], messageChecksum);
+    
+    if ( receivedChecksum != messageChecksum ) {
+        throw new Error('invalid MAVLink CRC in msgID ' +msgId+ ', got 0x' + receivedChecksum + ' checksum, calculated payload checkum as 0x'+messageChecksum );
+    }
 
     // Decode the payload and reorder the fields to match the order map.
     try {
@@ -484,7 +502,7 @@ MAVLink.prototype.decode = function(msgbuf) {
     }
     m.msgbuf = msgbuf;
     m.payload = msgbuf.slice(6);
-    m.crc = crc;
+    m.crc = receivedChecksum;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
     this.log(m);
     return m;

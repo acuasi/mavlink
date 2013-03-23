@@ -17,6 +17,34 @@ describe('MAVLink message registry', function() {
 
 });
 
+describe('Complete MAVLink packet', function() {
+
+  it('encodes to match a reference packet generated through the Python version', function() {
+
+    var heartbeat = new mavlink.messages.heartbeat(
+      mavlink.MAV_TYPE_GCS, // 6
+      mavlink.MAV_AUTOPILOT_INVALID, // 8
+      0, // base mode, mavlink.MAV_MODE_FLAG_***
+      0, // custom mode
+      0, // system status
+      3 // MAVLink version
+    );
+    
+    // Set header properties
+    _.extend(heartbeat, {
+      seq: 2,
+      srcSystem: 255,
+      srcComponent: 0
+    });
+
+    // Create a buffer that matches what the Python version of MAVLink creates
+    var reference = new Buffer([0xfe, 0x09, 0x02, 0xff , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x06 , 0x08 , 0x00 , 0x00 , 0x03 , 0x75 , 0x22]);
+    new Buffer(heartbeat.pack()).should.eql(reference);
+
+  });
+
+});
+
 describe('MAVLink header', function() {
 
   beforeEach(function() {
@@ -33,21 +61,22 @@ describe('MAVLink message', function() {
 
   beforeEach(function() {
 
+    // This is a heartbeat packet from a GCS to the APM.
     this.heartbeat = new mavlink.messages.heartbeat(
-      mavlink.MAV_TYPE_GENERIC,
-      mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
-      mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
-      0, // custom bitfield
-      mavlink.MAV_STATE_STANDBY
-      // The sixth field is apparently implicit, for the heartbeat (mavlink version)
+      mavlink.MAV_TYPE_GCS, // 6
+      mavlink.MAV_AUTOPILOT_INVALID, // 8
+      0, // base mode, mavlink.MAV_MODE_FLAG_***
+      0, // custom mode
+      mavlink.MAV_STATE_STANDBY, // system status
+      3 // MAVLink version
     );
 
   });
 
   it('has a set function to facilitate vivifying the object', function() {
-    this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GENERIC);
-    this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA);
-    this.heartbeat.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED);
+    this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GCS);
+    this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_INVALID);
+    this.heartbeat.base_mode.should.equal(0);
     this.heartbeat.custom_mode.should.equal(0);
     this.heartbeat.system_status.should.equal(mavlink.MAV_STATE_STANDBY);
   });
@@ -61,13 +90,13 @@ describe('MAVLink message', function() {
       // this is the payload, arranged in the order map specified in the protocol,
       // which differs from the constructor.
       0, 0, 0, 0, // custom bitfield -- length 4 (type=I)
-      mavlink.MAV_TYPE_GENERIC,
-      mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
-      mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
+      mavlink.MAV_TYPE_GCS,
+      mavlink.MAV_AUTOPILOT_INVALID,
+      0,
       mavlink.MAV_STATE_STANDBY,
-      0, // not sure, this is supposed to be auto-added?
-      85, // CRC
-      196 // CRC
+      3,
+      109, // CRC
+      79 // CRC
       ]);
 
   });
@@ -85,12 +114,12 @@ describe('MAVLink message', function() {
       var message = this.m.decode(packed);
 
       // this.fieldnames = ['type', 'autopilot', 'base_mode', 'custom_mode', 'system_status', 'mavlink_version'];
-      message.type.should.equal(mavlink.MAV_TYPE_GENERIC);  // supposed to be 0
-      message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA); // supposed to be 3
-      message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED); // supposed to be 128
+      message.type.should.equal(mavlink.MAV_TYPE_GCS);  // supposed to be 6
+      message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_INVALID); // supposed to be 8
+      message.base_mode.should.equal(0); // supposed to be 0
       message.custom_mode.should.equal(0);
       message.system_status.should.equal(mavlink.MAV_STATE_STANDBY); // supposed to be 3
-      message.mavlink_version.should.equal(0);
+      message.mavlink_version.should.equal(3); //?
 
     });
 

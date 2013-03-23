@@ -10,7 +10,7 @@ function mavutil() { };
 mavutil.x25Crc = function(buffer, crc) {
 
     var bytes = buffer;
-    crc = crc || 0xffff;
+    var crc = crc || 0xffff;
     _.each(bytes, function(e) {
         var tmp = e ^ (crc & 0xff);
         tmp = (tmp ^ (tmp << 4)) & 0xff;

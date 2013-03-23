@@ -1,14 +1,7 @@
 var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
   should = require('should'),
   sinon = require('sinon'),
-  fs = require('fs'),
-  winston = require('winston');
-
-var logger = new (winston.Logger)({
-  transports: [
-    new (winston.transports.File)({ filename: 'console.log' })
-  ]
-});
+  fs = require('fs');
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};
@@ -18,7 +11,7 @@ global.fixtures.serialStream = fs.readFileSync("javascript/test/capture.mavlink"
 describe("Generated MAVLink protocol handler object", function() {
 
   beforeEach(function() {
-    this.m = new MAVLink(logger);
+    this.m = new MAVLink();
   });
 
   describe("stream decoder", function() {
@@ -34,7 +27,6 @@ describe("Generated MAVLink protocol handler object", function() {
     it("decodes a real serial binary stream into an array of MAVLink messages", function() {
       this.m.pushBuffer(global.fixtures.serialStream);
       var messages = this.m.parseBuffer();
-      logger.log(messages);
     });
 
   });
@@ -113,8 +105,8 @@ describe("Generated MAVLink protocol handler object", function() {
     beforeEach(function() {
 
       // Valid heartbeat payload
-      this.heartbeatPayload = new Buffer([ 254, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 128, 3, 0, 243, 215 ]);
-    
+      this.heartbeatPayload = new Buffer([0xfe, 0x09, 0x03, 0xff , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x06 , 0x08 , 0x00 , 0x00 , 0x03, 0x9f, 0x5c]);
+
     });
 
     it("resets the expected length of the next packet to 6 (header)", function() {
