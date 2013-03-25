@@ -364,6 +364,7 @@ MAVLink.prototype.parsePayload = function() {
             this.total_packets_received += 1;
             this.buf = this.buf.slice(this.expected_length);
             this.expected_length = 6;
+            this.emit(m.name, m);
             this.emit('message', m);
             return m;
 
