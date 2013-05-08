@@ -1,30 +1,29 @@
-var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
-  should = require('should'),
-  sinon = require('sinon'),
-  fs = require('fs');
+var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0/mavlink.js'),
+should = require('should'),
+sinon = require('sinon'),
+fs = require('fs');
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};
 global.fixtures.serialStream = fs.readFileSync("javascript/test/capture.mavlink");
-//global.fixtures.heartbeatBinaryStream = fs.readFileSync("javascript/test/heartbeat-data-fixture");
 
 describe("Generated MAVLink protocol handler object", function() {
 
   beforeEach(function() {
-    this.m = new MAVLink();
+    this.m = new mavlink();
   });
 
   describe("stream decoder", function() {
 
     // This test prepopulates a single message as a binary buffer.
     it("decodes a binary stream representation of a single message correctly", function() {
-      this.m.pushBuffer(global.fixtures.heartbeatBinaryStream);
+      var b = new Buffer([0xfe, 0x09, 0x03, 0xff , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x06 , 0x08 , 0x00 , 0x00 , 0x03, 0x9f, 0x5c])
+      this.m.pushBuffer(b);
       var messages = this.m.parseBuffer();
-      
     });
 
     // This test includes a "noisy" signal, with non-mavlink data/messages/noise.
-    it("decodes a real serial binary stream into an array of MAVLink messages", function() {
+    xit("decodes a real serial binary stream into an array of MAVLink messages", function() {
       this.m.pushBuffer(global.fixtures.serialStream);
       var messages = this.m.parseBuffer();
     });
@@ -32,6 +31,8 @@ describe("Generated MAVLink protocol handler object", function() {
   });
 
   describe("buffer decoder", function() {
+
+        it('handles an empty or undefined buffer gracefully', function() { should.fail('need to implement') });
 
     it("decodes at most one message, even if there are more in its buffer", function() {
 
@@ -63,7 +64,7 @@ describe("Generated MAVLink protocol handler object", function() {
   });
 
   describe("prefix decoder", function() {
- 
+
     it("consumes, unretrievably, the first byte of the buffer, if its a bad prefix", function() {
 
       var b = new Buffer([1, 254]);
@@ -76,7 +77,7 @@ describe("Generated MAVLink protocol handler object", function() {
         this.m.buf.length.should.equal(1);
         this.m.buf[0].should.equal(254);
       }
-    
+
     });
 
     it("throws an exception if a malformed prefix is encountered", function() {
@@ -101,7 +102,7 @@ describe("Generated MAVLink protocol handler object", function() {
   });
 
   describe("payload decoder", function() {
-   
+
     beforeEach(function() {
 
       // Valid heartbeat payload
@@ -118,9 +119,9 @@ describe("Generated MAVLink protocol handler object", function() {
     });
 
     it("submits a candidate message to the mavlink decode function", function() {
-      
+
       var spy = sinon.spy(this.m, 'decode');
-    
+
       this.m.pushBuffer(this.heartbeatPayload);
       this.m.parseLength();
       this.m.parsePayload();
@@ -171,7 +172,7 @@ describe("Generated MAVLink protocol handler object", function() {
 
 });
 
-
+// todo: this test isn't exercising the MAVLink() object; should be moved elsewhere (tho the tests are valid)
 describe("MAVLink  X25CRC Decoder", function() {
 
   beforeEach(function() {
@@ -183,14 +184,71 @@ describe("MAVLink  X25CRC Decoder", function() {
   // This test matches the output directly taken by inspecting what the Python implementation
   // generated for the above packet.
   it('implements x25crc function', function() {
-      mavlink.x25Crc(this.heartbeatMessage).should.equal(27276);
+    mavlink.x25Crc(this.heartbeatMessage).should.equal(27276);
   });
 
   // Heartbeat crc_extra value is 50.
   it('can accumulate further bytes as needed (crc_extra)', function() {
-      var crc = mavlink.x25Crc(this.heartbeatMessage);
-      crc = mavlink.x25Crc([50], crc);
-      crc.should.eql(23711)
+    var crc = mavlink.x25Crc(this.heartbeatMessage);
+    crc = mavlink.x25Crc([50], crc);
+    crc.should.eql(23711)
+  });
+
+});
+
+// This test suite covers the knowledge of "connection information," the pieces
+// that the generated MAVLink code needs to be able to send / receive messages.
+// todo: the stub 'connection' object needs work, below
+describe("MAVLink system/state maintenance", function() {
+
+  beforeEach(function() {
+    
+    // dead simple stub of connection object
+    this.c = {
+      'name':'connection',
+      write: function(message) {}
+    }; // amazing
+
+    this.m = new mavlink(this.c);
+  });
+
+  it('accepts a connection object', function() {
+    this.m.connection.name.should.equal('connection');
+  });
+
+  it('can send a MAVLink message', function() {
+    var h = new mavlink.messages.heartbeat();
+    this.m.send(h);
+  });
+
+  it('knows the source system it is associated with, defaulting to 1', function() {
+    this.m.srcSystem.should.equal(1);
+  });
+
+  it('knows the source component it is associated with, defaulting to 1', function() {
+    this.m.srcComponent.should.equal(1);
+  });
+
+  describe('sequence number', function() {
+
+    it('starts at 0', function() {
+      this.m.seq.should.equal(0);
+    });
+
+    it('increments once when a MAVLink message is sent', function() {
+      var h = new mavlink.messages.heartbeat();
+      this.m.send(h);
+      this.m.seq.should.equal(1);
+    });
+
+    it('is modulo 0xFF', function() {
+      this.m.seq = 254;
+      var h = new mavlink.messages.heartbeat();
+      this.m.send(h);
+      this.m.seq.should.equal(0);
+
+    });
+
   });
 
 });

@@ -32,7 +32,45 @@ Buffer.prototype.toByteArray = function () {
   return Array.prototype.slice.call(this, 0)
 }
 
-mavlink = function(){};
+
+/*
+
+MAVLink protocol handling class definition; constructor is below.
+The constructor sets up a connection and some configuration.
+
+The layout of the mavlink namespace is like this:
+
+mavlink -> constructor
+mavlink.message -> constructor/prototype for specific MAVLink messages
+mavlink.messages.(message name) -> specific MAVLink message templates are here
+mavlink.(ENUMS) -> all the various enums are directly attached to the mavlink object
+mavlink.(other functions) -> various sundry functions that handle packing, decoding, etc.
+
+*/
+function mavlink(connection, logger, srcSystem, srcComponent) {
+
+    this.connection = connection;
+    this.logger = logger || undefined;
+    this.seq = 0;
+    this.buf = new Buffer(0);
+    this.srcSystem = (typeof srcSystem === 'undefined') ? 1 : srcSystem;
+    this.srcComponent =  (typeof srcComponent === 'undefined') ? 1 : srcComponent;
+
+    // The first packet we expect is a valid header, 6 bytes.
+    this.expected_length = 6;
+    this.have_prefix_error = false;
+    this.protocol_marker = 254;
+    this.little_endian = true;
+    this.crc_extra = true;
+    this.sort_fields = true;
+    this.total_packets_sent = 0;
+    this.total_bytes_sent = 0;
+    this.total_packets_received = 0;
+    this.total_bytes_received = 0;
+    this.total_receive_errors = 0;
+    this.startup_time = Date.now();
+    
+}
 
 // Implement the X25CRC function (present in the Python version through the mavutil.py package)
 mavlink.x25Crc = function(buffer, crc) {
@@ -98,7 +136,7 @@ mavlink.message.prototype.pack = function(crc_extra, payload) {
     this.msgbuf = this.header.pack().concat(payload);
     var crc = mavlink.x25Crc(this.msgbuf.slice(1));
 
-    // For now, assume always using crc_extra = True.  TODO: check/fix this.
+    // For now, assume always using crc_extra = True.  TODO: check/fix this?
     crc = mavlink.x25Crc([crc_extra], crc);
     this.msgbuf = this.msgbuf.concat(jspack.Pack('<H', [crc] ) );
     return this.msgbuf;
@@ -221,7 +259,7 @@ def mavfmt(field):
         'int32_t'  : 'i',
         'uint32_t' : 'I',
         'int64_t'  : 'd',
-        'uint64_t' : 'd',
+        'uint64_t' : 'd', # See docs; this isn't quite supported by jspack, using 'd' instead of python's 'q'
         }
 
     if field.array_length:
@@ -230,6 +268,8 @@ def mavfmt(field):
         return str(field.array_length)+map[field.type]
     return map[field.type]
 
+# For the Javascript implementation, the constructor function is defined way above so that
+# a common namespace can be used for all MAVLink related functions.
 def generate_mavlink_class(outf, msgs, xml):
     print("Generating MAVLink class")
 
@@ -249,63 +289,32 @@ mavlink.messages.bad_data = function(data, reason) {
     this.reason = reason;
 }
 
-/* MAVLink protocol handling class */
-MAVLink = function(logger, srcSystem, srcComponent) {
-
-    this.logger = logger;
-
-    this.seq = 0;
-    this.buf = new Buffer(0);
-   
-    this.srcSystem = (typeof srcSystem === 'undefined') ? 0 : srcSystem;
-    this.srcComponent =  (typeof srcComponent === 'undefined') ? 0 : srcComponent;
-
-    // The first packet we expect is a valid header, 6 bytes.
-    this.expected_length = 6;
-
-    this.have_prefix_error = false;
-
-    this.protocol_marker = 254;
-    this.little_endian = true;
-
-    this.crc_extra = true;
-    this.sort_fields = true;
-    this.total_packets_sent = 0;
-    this.total_bytes_sent = 0;
-    this.total_packets_received = 0;
-    this.total_bytes_received = 0;
-    this.total_receive_errors = 0;
-    this.startup_time = Date.now();
-    
-}
+// main mavlink constructor is already defined at the top of this file, so that
+// the generated code can hook into that namespace.  Further code is attached
+// here, as required for packing/unpacking.
 
 // Implements EventEmitter
-util.inherits(MAVLink, events.EventEmitter);
+util.inherits(mavlink, events.EventEmitter);
 
 // If the logger exists, this function will add a message to it.
 // Assumes the logger is a winston object.
-MAVLink.prototype.log = function(message) {
-    if(this.logger) {
+mavlink.prototype.log = function(message) {
+    if(typeof this.logger !== 'undefined') {
         this.logger.info(message);
     }
 }
 
-MAVLink.prototype.send = function(mavmsg) {
-        buf = mavmsg.pack(this);
-        this.file.write(buf);
+// Sending packs & sends the code over the wire.
+mavlink.prototype.send = function(mavmsg) {
+        var buf = mavmsg.pack();
+        this.connection.write(buf);
         this.seq = (this.seq + 1) % 255;
         this.total_packets_sent +=1;
         this.total_bytes_sent += buf.length;
 }
 
-// return number of bytes needed for next parsing stage
-MAVLink.prototype.bytes_needed = function() {
-    ret = this.expected_length - this.buf.length;
-    return ( ret <= 0 ) ? 1 : ret;
-}
-
 // add data to the local buffer
-MAVLink.prototype.pushBuffer = function(data) {
+mavlink.prototype.pushBuffer = function(data) {
     if(data) {
         this.buf = Buffer.concat([this.buf, data]);
         this.total_bytes_received += data.length;
@@ -313,7 +322,7 @@ MAVLink.prototype.pushBuffer = function(data) {
 }
 
 // Decode prefix.  Elides the prefix.
-MAVLink.prototype.parsePrefix = function() {
+mavlink.prototype.parsePrefix = function() {
 
     // Test for a message prefix.
     if( this.buf.length >= 1 && this.buf[0] != 254 ) {
@@ -330,7 +339,7 @@ MAVLink.prototype.parsePrefix = function() {
 }
 
 // Determine the length.  Leaves buffer untouched.
-MAVLink.prototype.parseLength = function() {
+mavlink.prototype.parseLength = function() {
     
     if( this.buf.length >= 3 ) {
         var unpacked = jspack.Unpack('BB', this.buf.slice(1, 3));
@@ -340,7 +349,7 @@ MAVLink.prototype.parseLength = function() {
 }
 
 // input some data bytes, possibly returning a new message
-MAVLink.prototype.parseChar = function(c) {
+mavlink.prototype.parseChar = function(c) {
 
     var m;
     try {
@@ -362,7 +371,7 @@ MAVLink.prototype.parseChar = function(c) {
 
 }
 
-MAVLink.prototype.parsePayload = function() {
+mavlink.prototype.parsePayload = function() {
 
     // If we have enough bytes to try and read it, read it.
     if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
@@ -403,7 +412,7 @@ MAVLink.prototype.parsePayload = function() {
 }
 
 // input some data bytes, possibly returning an array of new messages
-MAVLink.prototype.parseBuffer = function(s) {
+mavlink.prototype.parseBuffer = function(s) {
     
     // Get a message, if one is available in the stream.
     var m = this.parseChar(s);
@@ -429,7 +438,7 @@ MAVLink.prototype.parseBuffer = function(s) {
 }
 
 /* decode a buffer as a MAVLink message */
-MAVLink.prototype.decode = function(msgbuf) {
+mavlink.prototype.decode = function(msgbuf) {
 
     var magic, mlen, seq, srcSystem, srcComponent, unpacked, msgId;
 

@@ -1,4 +1,4 @@
-var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0.js'),
+var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0/mavlink.js'),
   should = require('should');
 
 describe('MAVLink message registry', function() {
@@ -104,7 +104,7 @@ describe('MAVLink message', function() {
   describe('decode function', function() {
 
     beforeEach(function() {
-      this.m = new MAVLink();
+      this.m = new mavlink();
     });
 
     // need to add tests for the header fields as well, specifying seq etc.
