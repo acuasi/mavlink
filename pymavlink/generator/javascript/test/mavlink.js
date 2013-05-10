@@ -23,7 +23,7 @@ describe("Generated MAVLink protocol handler object", function() {
     });
 
     // This test includes a "noisy" signal, with non-mavlink data/messages/noise.
-    xit("decodes a real serial binary stream into an array of MAVLink messages", function() {
+    it("decodes a real serial binary stream into an array of MAVLink messages", function() {
       this.m.pushBuffer(global.fixtures.serialStream);
       var messages = this.m.parseBuffer();
     });
@@ -32,9 +32,11 @@ describe("Generated MAVLink protocol handler object", function() {
 
   describe("buffer decoder", function() {
 
-        it('handles an empty or undefined buffer gracefully', function() { should.fail('need to implement') });
+    xit('handles an empty or undefined buffer gracefully', function() { 
+      should.fail('need to implement')
+    });
 
-    it("decodes at most one message, even if there are more in its buffer", function() {
+    xit("decodes at most one message, even if there are more in its buffer", function() {
 
     });
     
@@ -134,15 +136,35 @@ describe("Generated MAVLink protocol handler object", function() {
 
     // Skipping because I'm not sure what I want to do with making bad_data messages,
     // or exceptions, or some combo thereof.  Need to think it through a bit more.
-    it.skip("returns a bad_data message if a borked message is encountered", function() {
-      var b = new Buffer([3, 0, 1, 2, 3, 4, 5]); // invalid message
+    it("returns a bad_data message if a borked message is encountered", function() {
+
+      var b = new Buffer([3, 0, 1, 2, 3, 4, 5]); // invalid message -- bad prefix
       this.m.pushBuffer(b);
       var message;
       try {
         message = this.m.parsePayload();
       } catch(e) {}
       message.should.be.an.instanceof(mavlink.messages.bad_data);      
+
     });
+
+    it("increments the total_receive_errors counter when an invalid prefix is encountered", function() {
+         this.m.total_receive_errors.should.equal(0);
+         var b = new Buffer([3, 0, 1, 2, 3, 4, 5]); // invalid message -- bad prefix
+         this.m.pushBuffer(b);
+         var message = this.m.parsePayload();
+         this.m.total_receive_errors.should.equal(1);
+    });
+
+    it("increments the total_receive_errors counter when an invalid or unparseable payload is encountered", function() {
+         this.m.total_receive_errors.should.equal(0);
+         // valid prefix but with some random damage in the packet header/payload
+         var b = new Buffer([0xfe, 0x19, 0x03, 0xff , 0x40 , 0x00 , 0x00 , 0x0a , 0x00 , 0x00 , 0xc6 , 0x08 , 0xff , 0x00 , 0x03, 0x9f, 0x5c]);
+         this.m.pushBuffer(b);
+         var message = this.m.parsePayload();
+         this.m.total_receive_errors.should.equal(1);
+
+    } );
 
     it("returns a valid mavlink packet if everything is OK", function() {
       this.m.pushBuffer(this.heartbeatPayload);

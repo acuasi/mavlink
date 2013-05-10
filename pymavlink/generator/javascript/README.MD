@@ -44,7 +44,7 @@ var mavlink = require('mavlink_ardupilotmega_v1.0'),
 	net = require('net');
 
 // Instantiate the parser
-mavlinkParser = new MAVLink();
+mavlinkParser = new mavlink();
 
 // Create a connection -- can be anything that can receive/send binary
 connection = net.createConnection(5760, '127.0.0.1');

@@ -58,7 +58,6 @@ function mavlink(connection, logger, srcSystem, srcComponent) {
 
     // The first packet we expect is a valid header, 6 bytes.
     this.expected_length = 6;
-    this.have_prefix_error = false;
     this.protocol_marker = 254;
     this.little_endian = true;
     this.crc_extra = true;
@@ -373,8 +372,9 @@ mavlink.prototype.parseChar = function(c) {
 
 mavlink.prototype.parsePayload = function() {
 
-    // If we have enough bytes to try and read it, read it.
-    if( this.expected_length >= 8 && this.buf.length >= this.expected_length ) {
+    // If we have enough bytes to try and read it, read it; otherwise, ignore and continue,
+    // waiting for new bytes to become available.
+    if( this.expected_length >= 6 && this.buf.length >= this.expected_length ) {
 
         // Slice off the expected packet length, reset expectation to be to find a header.
         var mbuf = this.buf.slice(0, this.expected_length);
@@ -399,12 +399,13 @@ mavlink.prototype.parsePayload = function() {
             // made this look like a packet.  Consume the first symbol in the buffer and continue parsing.
             this.buf = this.buf.slice(1);
             this.expected_length = 6;
-            
+            ++this.total_receive_errors;
+            m = new mavlink.messages.bad_data(this.buf, e.message);
+
             // Log.
             //w.info(e);
 
-            // bubble
-            throw e;
+            return m;
         }
     }
     return null;
