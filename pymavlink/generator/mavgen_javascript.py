@@ -304,9 +304,9 @@ mavlink.prototype.log = function(message) {
 }
 
 // Sending packs & sends the code over the wire.
-mavlink.prototype.send = function(mavmsg) {
-        var buf = mavmsg.pack();
-        this.connection.write(buf);
+mavlink.prototype.send = function(mavmsg, connection) {
+        var buf = new Buffer(mavmsg.pack());
+        connection.write(buf);
         this.seq = (this.seq + 1) % 255;
         this.total_packets_sent +=1;
         this.total_bytes_sent += buf.length;
