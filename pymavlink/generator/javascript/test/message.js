@@ -29,17 +29,10 @@ describe('Complete MAVLink packet', function() {
       0, // system status
       3 // MAVLink version
     );
-    
-    // Set header properties
-    _.extend(heartbeat, {
-      seq: 2,
-      srcSystem: 255,
-      srcComponent: 0
-    });
 
     // Create a buffer that matches what the Python version of MAVLink creates
     var reference = new Buffer([0xfe, 0x09, 0x02, 0xff , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x06 , 0x08 , 0x00 , 0x00 , 0x03 , 0x75 , 0x22]);
-    new Buffer(heartbeat.pack()).should.eql(reference);
+    new Buffer(heartbeat.pack(2, 255, 0)).should.eql(reference);
 
   });
 

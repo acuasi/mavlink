@@ -47,9 +47,8 @@ mavlink.(ENUMS) -> all the various enums are directly attached to the mavlink ob
 mavlink.(other functions) -> various sundry functions that handle packing, decoding, etc.
 
 */
-function mavlink(connection, logger, srcSystem, srcComponent) {
+function mavlink(logger, srcSystem, srcComponent) {
 
-    this.connection = connection;
     this.logger = logger || undefined;
     this.seq = 0;
     this.buf = new Buffer(0);
@@ -128,10 +127,10 @@ mavlink.message.prototype.set = function(args) {
 
 // This pack function builds the header and produces a complete MAVLink message,
 // including header and message CRC.
-mavlink.message.prototype.pack = function(crc_extra, payload) {
+mavlink.message.prototype.pack = function(seq, srcSystem, srcComponent, crc_extra, payload) {
 
     this.payload = payload;
-    this.header = new mavlink.header(this.id, payload.length, this.seq, this.srcSystem, this.srcComponent);    
+    this.header = new mavlink.header(this.id, payload.length, seq, srcSystem, srcComponent);    
     this.msgbuf = this.header.pack().concat(payload);
     var crc = mavlink.x25Crc(this.msgbuf.slice(1));
 
@@ -238,8 +237,8 @@ mavlink.messages.%s.prototype = new mavlink.message;
 
         # Implement the pack() function for this message
         outf.write("""
-mavlink.messages.%s.prototype.pack = function() {
-    return mavlink.message.prototype.pack.call(this, this.crc_extra, jspack.Pack(this.format""" % m.name.lower())
+mavlink.messages.%s.prototype.pack = function(src, srcSystem, srcComponent) {
+    return mavlink.message.prototype.pack.call(this, src, srcSystem, srcComponent, this.crc_extra, jspack.Pack(this.format""" % m.name.lower())
         if len(m.fields) != 0:
                 outf.write(", [ this." + ", this.".join(m.ordered_fieldnames) + ']')
         outf.write("));\n}\n\n")
@@ -295,6 +294,11 @@ mavlink.messages.bad_data = function(data, reason) {
 // Implements EventEmitter
 util.inherits(mavlink, events.EventEmitter);
 
+// Allow the client to assign a connection handler to this object
+mavlink.prototype.setConnection = function(connection) {
+    this.connection = connection;
+}
+
 // If the logger exists, this function will add a message to it.
 // Assumes the logger is a winston object.
 mavlink.prototype.log = function(message) {
@@ -304,9 +308,9 @@ mavlink.prototype.log = function(message) {
 }
 
 // Sending packs & sends the code over the wire.
-mavlink.prototype.send = function(mavmsg, connection) {
-        var buf = new Buffer(mavmsg.pack());
-        connection.write(buf);
+mavlink.prototype.send = function(mavmsg) {
+        var buf = new Buffer(mavmsg.pack(this.seq, this.srcSystem, this.srcComponent));
+        this.connection.write(buf);
         this.seq = (this.seq + 1) % 255;
         this.total_packets_sent +=1;
         this.total_bytes_sent += buf.length;

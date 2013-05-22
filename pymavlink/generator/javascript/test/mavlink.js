@@ -226,15 +226,17 @@ describe("MAVLink system/state maintenance", function() {
   beforeEach(function() {
     
     // dead simple stub of connection object
-    this.c = {
-      'name':'connection',
-      write: function(message) {}
-    }; // amazing
+    var fakeConnection = function() {};
+    fakeConnection.prototype.name = 'connection';
+    fakeConnection.prototype.write =  function(message) {};
+    this.c = new fakeConnection();
+    this.m = new mavlink();
+    this.m.setConnection(this.c); 
 
-    this.m = new mavlink(this.c);
   });
 
-  it('accepts a connection object', function() {
+  it('accepts a connection object via a setConnection method', function() {
+    this.m.setConnection(this.c); // redundant to the beforeEach method, just putting it here for clarity of the test.
     this.m.connection.name.should.equal('connection');
   });
 
@@ -249,6 +251,21 @@ describe("MAVLink system/state maintenance", function() {
 
   it('knows the source component it is associated with, defaulting to 1', function() {
     this.m.srcComponent.should.equal(1);
+  });
+
+  it('uses the correct source and component numbers when building the header for a message', function() {
+    var h = new mavlink.messages.heartbeat();
+    this.m.send(h);
+    h.header.srcSystem.should.equal(1);
+    h.header.srcComponent.should.equal(1);
+  });
+
+  it('uses the correct seq number when building the header for a message', function() {
+    // Fake the seq #
+    this.m.seq = 2;
+    var h = new mavlink.messages.heartbeat();
+    this.m.send(h);
+    h.header.seq.should.equal(2);
   });
 
   describe('sequence number', function() {
