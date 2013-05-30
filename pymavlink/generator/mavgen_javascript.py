@@ -504,7 +504,12 @@ mavlink.prototype.decode = function(msgbuf) {
     // Reorder the fields to match the order map
     var args = [];
     _.each(t, function(e, i, l) {
-        args[i] = t[decoder.order_map[i]]
+        if( 'string' === typeof t[decoder.order_map[i]]) {
+            // Strip null padding chars
+            args[i] = t[decoder.order_map[i]].replace(/\0+/g, '');
+        } else {
+            args[i] = t[decoder.order_map[i]]
+        }
     });
 
     // construct the message object

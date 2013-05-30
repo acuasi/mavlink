@@ -134,6 +134,13 @@ describe("Generated MAVLink protocol handler object", function() {
 
     });
 
+    it("strips unicode-type encoding values from string values", function() {
+      var param_set = new mavlink.messages.param_set(1, 2, 'MAG_ENABLE', 1, 0); // extra zero = don't care about type
+      var buf = new Buffer(param_set.pack(0,0,0));
+      var decoded = this.m.decode(buf);
+      decoded.param_id.should.equal('MAG_ENABLE');      
+    });
+
     // Skipping because I'm not sure what I want to do with making bad_data messages,
     // or exceptions, or some combo thereof.  Need to think it through a bit more.
     it("returns a bad_data message if a borked message is encountered", function() {
