@@ -248,6 +248,10 @@ class mavfile(object):
                 continue
             return m
 
+    def check_condition(self, condition):
+        '''check if a condition is true'''
+        return evaluate_condition(condition, self.messages)
+
     def mavlink10(self):
         '''return True if using MAVLink 1.0'''
         return self.WIRE_PROTOCOL_VERSION == "1.0"
@@ -369,6 +373,35 @@ class mavfile(object):
         else:
             MAV_ACTION_SET_AUTO = 13
             self.mav.action_send(self.target_system, self.target_component, MAV_ACTION_SET_AUTO)
+
+    def mode_mapping(self):
+        '''return dictionary mapping mode names to numbers, or None if unknown'''
+        mav_type = self.field('HEARTBEAT', 'type', None)
+        if mav_type is None:
+            return None
+        map = None
+        if mav_type == mavlink.MAV_TYPE_QUADROTOR:
+            map = mode_mapping_acm
+        if mav_type == mavlink.MAV_TYPE_FIXED_WING:
+            map = mode_mapping_apm
+        if mav_type == mavlink.MAV_TYPE_GROUND_ROVER:
+            map = mode_mapping_rover
+        if map is None:
+            return None
+        inv_map = {a:b for b, a in map.items()}
+        return inv_map
+
+    def set_mode(self, mode):
+        '''enter arbitrary mode'''
+        if isinstance(mode, str):
+            map = self.mode_mapping()
+            if map is None or mode not in map:
+                print("Unknown mode '%s'" % mode)
+                return
+            mode = map[mode]
+        self.mav.set_mode_send(self.target_system,
+                               mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                               mode)
 
     def set_mode_rtl(self):
         '''enter RTL mode'''
@@ -509,6 +542,28 @@ class mavfile(object):
                 0, # param6
                 0) # param7
 
+    def motors_armed(self):
+        '''return true if motors armed'''
+        if not 'HEARTBEAT' in self.messages:
+            return False
+        m = self.messages['HEARTBEAT']
+        return (m.base_mode & mavlink.MAV_MODE_FLAG_SAFETY_ARMED) != 0
+
+    def motors_armed_wait(self):
+        '''wait for motors to be armed'''
+        while True:
+            m = self.wait_heartbeat()
+            if self.motors_armed():
+                return
+
+    def motors_disarmed_wait(self):
+        '''wait for motors to be disarmed'''
+        while True:
+            m = self.wait_heartbeat()
+            if not self.motors_armed():
+                return
+
+
     def field(self, type, field, default=None):
         '''convenient function for returning an arbitrary MAVLink
            field with a default'''
@@ -588,7 +643,7 @@ class mavserial(mavfile):
 
 class mavudp(mavfile):
     '''a UDP mavlink socket'''
-    def __init__(self, device, input=True, source_system=255):
+    def __init__(self, device, input=True, broadcast=False, source_system=255):
         a = device.split(':')
         if len(a) != 2:
             print("UDP ports must be specified as host:port")
@@ -600,6 +655,8 @@ class mavudp(mavfile):
             self.port.bind((a[0], int(a[1])))
         else:
             self.destination_addr = (a[0], int(a[1]))
+            if broadcast:
+                self.port.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         set_close_on_exec(self.port.fileno())
         self.port.setblocking(0)
         self.last_address = None
@@ -958,46 +1015,60 @@ def mode_string_v09(msg):
         return mapping[cmode]
     return "Mode(%s,%s)" % cmode
 
+mode_mapping_apm = {
+    0 : 'MANUAL',
+    1 : 'CIRCLE',
+    2 : 'STABILIZE',
+    3 : 'TRAINING',
+    5 : 'FBWA',
+    6 : 'FBWB',
+    7 : 'FBWC',
+    10 : 'AUTO',
+    11 : 'RTL',
+    12 : 'LOITER',
+    13 : 'TAKEOFF',
+    14 : 'LAND',
+    15 : 'GUIDED',
+    16 : 'INITIALISING'
+    }
+mode_mapping_acm = {
+    0 : 'STABILIZE',
+    1 : 'ACRO',
+    2 : 'ALT_HOLD',
+    3 : 'AUTO',
+    4 : 'GUIDED',
+    5 : 'LOITER',
+    6 : 'RTL',
+    7 : 'CIRCLE',
+    8 : 'POSITION',
+    9 : 'LAND',
+    10 : 'OF_LOITER',
+    11 : 'APPROACH'
+    }
+mode_mapping_rover = {
+    0 : 'MANUAL',
+    2 : 'LEARNING',
+    3 : 'STEERING',
+    4 : 'HOLD',
+    10 : 'AUTO',
+    11 : 'RTL',
+    15 : 'GUIDED',
+    16 : 'INITIALISING'
+    }
+
 def mode_string_v10(msg):
     '''mode string for 1.0 protocol, from heartbeat'''
     if not msg.base_mode & mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED:
         return "Mode(0x%08x)" % msg.base_mode
-    mapping_apm = {
-        0 : 'MANUAL',
-        1 : 'CIRCLE',
-        2 : 'STABILIZE',
-        3 : 'TRAINING',
-        5 : 'FBWA',
-        6 : 'FBWB',
-        7 : 'FBWC',
-        10 : 'AUTO',
-        11 : 'RTL',
-        12 : 'LOITER',
-        13 : 'TAKEOFF',
-        14 : 'LAND',
-        15 : 'GUIDED',
-        16 : 'INITIALISING'
-        }
-    mapping_acm = {
-        0 : 'STABILIZE',
-        1 : 'ACRO',
-        2 : 'ALT_HOLD',
-        3 : 'AUTO',
-        4 : 'GUIDED',
-        5 : 'LOITER',
-        6 : 'RTL',
-        7 : 'CIRCLE',
-        8 : 'POSITION',
-        9 : 'LAND',
-        10 : 'OF_LOITER',
-        11 : 'APPROACH'
-        }
     if msg.type == mavlink.MAV_TYPE_QUADROTOR:
-        if msg.custom_mode in mapping_acm:
-            return mapping_acm[msg.custom_mode]
+        if msg.custom_mode in mode_mapping_acm:
+            return mode_mapping_acm[msg.custom_mode]
     if msg.type == mavlink.MAV_TYPE_FIXED_WING:
-        if msg.custom_mode in mapping_apm:
-            return mapping_apm[msg.custom_mode]
+        if msg.custom_mode in mode_mapping_apm:
+            return mode_mapping_apm[msg.custom_mode]
+    if msg.type == mavlink.MAV_TYPE_GROUND_ROVER:
+        if msg.custom_mode in mode_mapping_rover:
+            return mode_mapping_rover[msg.custom_mode]
     return "Mode(%u)" % msg.custom_mode
 
     

@@ -1,7 +1,7 @@
-var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0/mavlink.js'),
-should = require('should'),
-sinon = require('sinon'),
-fs = require('fs');
+var mavlink = require('../implementations/mavlink_ardupilotmega_v1.0'),
+  should = require('should'),
+  sinon = require('sinon'),
+  fs = require('fs');
 
 // Actual data stream taken from APM.
 global.fixtures = global.fixtures || {};

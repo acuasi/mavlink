@@ -96,7 +96,7 @@ class MAVLink_message(object):
         return d
 
     def to_json(self):
-        return json.dumps(self.to_dict)
+        return json.dumps(self.to_dict())
 
     def pack(self, mav, crc_extra, payload):
         self._payload = payload
@@ -1986,6 +1986,10 @@ class MAVLink_bad_data(MAVLink_message):
                 self.data = data
                 self.reason = reason
                 self._msgbuf = data
+
+        def __str__(self):
+            '''Override the __str__ function from MAVLink_messages because non-printable characters are common in to be the reason for this message to exist.'''
+            return '%s {%s, data:%s}' % (self._type, self.reason, [('%x' % ord(i) if isinstance(i, str) else '%x' % i) for i in self.data])  
             
 class MAVLink(object):
         '''MAVLink protocol handling class'''
@@ -1997,6 +2001,9 @@ class MAVLink(object):
                 self.callback = None
                 self.callback_args = None
                 self.callback_kwargs = None
+                self.send_callback = None
+                self.send_callback_args = None
+                self.send_callback_kwargs = None
                 self.buf = array.array('B')
                 self.expected_length = 6
                 self.have_prefix_error = False
@@ -2016,6 +2023,11 @@ class MAVLink(object):
             self.callback = callback
             self.callback_args = args
             self.callback_kwargs = kwargs
+
+        def set_send_callback(self, callback, *args, **kwargs):
+            self.send_callback = callback
+            self.send_callback_args = args
+            self.send_callback_kwargs = kwargs
             
         def send(self, mavmsg):
                 '''send a MAVLink message'''
@@ -2024,6 +2036,8 @@ class MAVLink(object):
                 self.seq = (self.seq + 1) % 255
                 self.total_packets_sent += 1
                 self.total_bytes_sent += len(buf)
+                if self.send_callback:
+                    self.send_callback(mavmsg, *self.send_callback_args, **self.send_callback_kwargs)
 
         def bytes_needed(self):
             '''return number of bytes needed for next parsing stage'''

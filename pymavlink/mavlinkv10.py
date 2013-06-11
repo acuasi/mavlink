@@ -191,7 +191,7 @@ FENCE_ACTION_ENUM_END = 3 #
 # FENCE_BREACH
 FENCE_BREACH_NONE = 0 # No last fence breach
 FENCE_BREACH_MINALT = 1 # Breached minimum altitude
-FENCE_BREACH_MAXALT = 2 # Breached minimum altitude
+FENCE_BREACH_MAXALT = 2 # Breached maximum altitude
 FENCE_BREACH_BOUNDARY = 3 # Breached fence boundary
 FENCE_BREACH_ENUM_END = 4 # 
 
@@ -225,7 +225,9 @@ MAV_AUTOPILOT_PPZ = 9 # PPZ UAV - http://nongnu.org/paparazzi
 MAV_AUTOPILOT_UDB = 10 # UAV Dev Board
 MAV_AUTOPILOT_FP = 11 # FlexiPilot
 MAV_AUTOPILOT_PX4 = 12 # PX4 Autopilot - http://pixhawk.ethz.ch/px4/
-MAV_AUTOPILOT_ENUM_END = 13 # 
+MAV_AUTOPILOT_SMACCMPILOT = 13 # SMACCMPilot - http://smaccmpilot.org
+MAV_AUTOPILOT_AUTOQUAD = 14 # AutoQuad -- http://autoquad.org
+MAV_AUTOPILOT_ENUM_END = 15 # 
 
 # MAV_TYPE
 MAV_TYPE_GENERIC = 0 # Generic micro air vehicle.
@@ -497,6 +499,7 @@ MAVLINK_MSG_ID_DATA16 = 169
 MAVLINK_MSG_ID_DATA32 = 170
 MAVLINK_MSG_ID_DATA64 = 171
 MAVLINK_MSG_ID_DATA96 = 172
+MAVLINK_MSG_ID_RANGEFINDER = 173
 MAVLINK_MSG_ID_HEARTBEAT = 0
 MAVLINK_MSG_ID_SYS_STATUS = 1
 MAVLINK_MSG_ID_SYSTEM_TIME = 2
@@ -569,6 +572,10 @@ MAVLINK_MSG_ID_VISION_POSITION_ESTIMATE = 102
 MAVLINK_MSG_ID_VISION_SPEED_ESTIMATE = 103
 MAVLINK_MSG_ID_VICON_POSITION_ESTIMATE = 104
 MAVLINK_MSG_ID_HIGHRES_IMU = 105
+MAVLINK_MSG_ID_OMNIDIRECTIONAL_FLOW = 106
+MAVLINK_MSG_ID_HIL_SENSOR = 107
+MAVLINK_MSG_ID_SIM_STATE = 108
+MAVLINK_MSG_ID_RADIO_STATUS = 109
 MAVLINK_MSG_ID_FILE_TRANSFER_START = 110
 MAVLINK_MSG_ID_FILE_TRANSFER_DIR_LIST = 111
 MAVLINK_MSG_ID_FILE_TRANSFER_RES = 112
@@ -955,6 +962,19 @@ class MAVLink_data96_message(MAVLink_message):
 
         def pack(self, mav):
                 return MAVLink_message.pack(self, mav, 22, struct.pack('<BB96s', self.type, self.len, self.data))
+
+class MAVLink_rangefinder_message(MAVLink_message):
+        '''
+        Rangefinder reporting
+        '''
+        def __init__(self, distance, voltage):
+                MAVLink_message.__init__(self, MAVLINK_MSG_ID_RANGEFINDER, 'RANGEFINDER')
+                self._fieldnames = ['distance', 'voltage']
+                self.distance = distance
+                self.voltage = voltage
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 83, struct.pack('<ff', self.distance, self.voltage))
 
 class MAVLink_heartbeat_message(MAVLink_message):
         '''
@@ -2350,6 +2370,96 @@ class MAVLink_highres_imu_message(MAVLink_message):
         def pack(self, mav):
                 return MAVLink_message.pack(self, mav, 93, struct.pack('<QfffffffffffffH', self.time_usec, self.xacc, self.yacc, self.zacc, self.xgyro, self.ygyro, self.zgyro, self.xmag, self.ymag, self.zmag, self.abs_pressure, self.diff_pressure, self.pressure_alt, self.temperature, self.fields_updated))
 
+class MAVLink_omnidirectional_flow_message(MAVLink_message):
+        '''
+        Optical flow from an omnidirectional flow sensor (e.g. PX4FLOW
+        with wide angle lens)
+        '''
+        def __init__(self, time_usec, sensor_id, left, right, quality, front_distance_m):
+                MAVLink_message.__init__(self, MAVLINK_MSG_ID_OMNIDIRECTIONAL_FLOW, 'OMNIDIRECTIONAL_FLOW')
+                self._fieldnames = ['time_usec', 'sensor_id', 'left', 'right', 'quality', 'front_distance_m']
+                self.time_usec = time_usec
+                self.sensor_id = sensor_id
+                self.left = left
+                self.right = right
+                self.quality = quality
+                self.front_distance_m = front_distance_m
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 211, struct.pack('<Qf10h10hBB', self.time_usec, self.front_distance_m, self.left, self.right, self.sensor_id, self.quality))
+
+class MAVLink_hil_sensor_message(MAVLink_message):
+        '''
+        The IMU readings in SI units in NED body frame
+        '''
+        def __init__(self, time_usec, roll, pitch, yaw, lat, lon, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, gps_alt, temperature, fields_updated):
+                MAVLink_message.__init__(self, MAVLINK_MSG_ID_HIL_SENSOR, 'HIL_SENSOR')
+                self._fieldnames = ['time_usec', 'roll', 'pitch', 'yaw', 'lat', 'lon', 'xacc', 'yacc', 'zacc', 'xgyro', 'ygyro', 'zgyro', 'xmag', 'ymag', 'zmag', 'abs_pressure', 'diff_pressure', 'pressure_alt', 'gps_alt', 'temperature', 'fields_updated']
+                self.time_usec = time_usec
+                self.roll = roll
+                self.pitch = pitch
+                self.yaw = yaw
+                self.lat = lat
+                self.lon = lon
+                self.xacc = xacc
+                self.yacc = yacc
+                self.zacc = zacc
+                self.xgyro = xgyro
+                self.ygyro = ygyro
+                self.zgyro = zgyro
+                self.xmag = xmag
+                self.ymag = ymag
+                self.zmag = zmag
+                self.abs_pressure = abs_pressure
+                self.diff_pressure = diff_pressure
+                self.pressure_alt = pressure_alt
+                self.gps_alt = gps_alt
+                self.temperature = temperature
+                self.fields_updated = fields_updated
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 5, struct.pack('<QfffiiffffffffffffffI', self.time_usec, self.roll, self.pitch, self.yaw, self.lat, self.lon, self.xacc, self.yacc, self.zacc, self.xgyro, self.ygyro, self.zgyro, self.xmag, self.ymag, self.zmag, self.abs_pressure, self.diff_pressure, self.pressure_alt, self.gps_alt, self.temperature, self.fields_updated))
+
+class MAVLink_sim_state_message(MAVLink_message):
+        '''
+        Status of simulation environment, if used
+        '''
+        def __init__(self, roll, pitch, yaw, xacc, yacc, zacc, xgyro, ygyro, zgyro, lat, lng):
+                MAVLink_message.__init__(self, MAVLINK_MSG_ID_SIM_STATE, 'SIM_STATE')
+                self._fieldnames = ['roll', 'pitch', 'yaw', 'xacc', 'yacc', 'zacc', 'xgyro', 'ygyro', 'zgyro', 'lat', 'lng']
+                self.roll = roll
+                self.pitch = pitch
+                self.yaw = yaw
+                self.xacc = xacc
+                self.yacc = yacc
+                self.zacc = zacc
+                self.xgyro = xgyro
+                self.ygyro = ygyro
+                self.zgyro = zgyro
+                self.lat = lat
+                self.lng = lng
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 212, struct.pack('<fffffffffff', self.roll, self.pitch, self.yaw, self.xacc, self.yacc, self.zacc, self.xgyro, self.ygyro, self.zgyro, self.lat, self.lng))
+
+class MAVLink_radio_status_message(MAVLink_message):
+        '''
+        Status generated by radio
+        '''
+        def __init__(self, rssi, remrssi, txbuf, noise, remnoise, rxerrors, fixed):
+                MAVLink_message.__init__(self, MAVLINK_MSG_ID_RADIO_STATUS, 'RADIO_STATUS')
+                self._fieldnames = ['rssi', 'remrssi', 'txbuf', 'noise', 'remnoise', 'rxerrors', 'fixed']
+                self.rssi = rssi
+                self.remrssi = remrssi
+                self.txbuf = txbuf
+                self.noise = noise
+                self.remnoise = remnoise
+                self.rxerrors = rxerrors
+                self.fixed = fixed
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 185, struct.pack('<HHBBBBB', self.rxerrors, self.fixed, self.rssi, self.remrssi, self.txbuf, self.noise, self.remnoise))
+
 class MAVLink_file_transfer_start_message(MAVLink_message):
         '''
         Begin file transfer
@@ -2574,6 +2684,7 @@ mavlink_map = {
         MAVLINK_MSG_ID_DATA32 : ( '<BB32s', MAVLink_data32_message, [0, 1, 2], 73 ),
         MAVLINK_MSG_ID_DATA64 : ( '<BB64s', MAVLink_data64_message, [0, 1, 2], 181 ),
         MAVLINK_MSG_ID_DATA96 : ( '<BB96s', MAVLink_data96_message, [0, 1, 2], 22 ),
+        MAVLINK_MSG_ID_RANGEFINDER : ( '<ff', MAVLink_rangefinder_message, [0, 1], 83 ),
         MAVLINK_MSG_ID_HEARTBEAT : ( '<IBBBBB', MAVLink_heartbeat_message, [1, 2, 3, 0, 4, 5], 50 ),
         MAVLINK_MSG_ID_SYS_STATUS : ( '<IIIHHhHHHHHHb', MAVLink_sys_status_message, [0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11], 124 ),
         MAVLINK_MSG_ID_SYSTEM_TIME : ( '<QI', MAVLink_system_time_message, [0, 1], 137 ),
@@ -2646,6 +2757,10 @@ mavlink_map = {
         MAVLINK_MSG_ID_VISION_SPEED_ESTIMATE : ( '<Qfff', MAVLink_vision_speed_estimate_message, [0, 1, 2, 3], 208 ),
         MAVLINK_MSG_ID_VICON_POSITION_ESTIMATE : ( '<Qffffff', MAVLink_vicon_position_estimate_message, [0, 1, 2, 3, 4, 5, 6], 56 ),
         MAVLINK_MSG_ID_HIGHRES_IMU : ( '<QfffffffffffffH', MAVLink_highres_imu_message, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 93 ),
+        MAVLINK_MSG_ID_OMNIDIRECTIONAL_FLOW : ( '<Qf10h10hBB', MAVLink_omnidirectional_flow_message, [0, 4, 2, 3, 5, 1], 211 ),
+        MAVLINK_MSG_ID_HIL_SENSOR : ( '<QfffiiffffffffffffffI', MAVLink_hil_sensor_message, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 5 ),
+        MAVLINK_MSG_ID_SIM_STATE : ( '<fffffffffff', MAVLink_sim_state_message, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 212 ),
+        MAVLINK_MSG_ID_RADIO_STATUS : ( '<HHBBBBB', MAVLink_radio_status_message, [2, 3, 4, 5, 6, 0, 1], 185 ),
         MAVLINK_MSG_ID_FILE_TRANSFER_START : ( '<QI240sBB', MAVLink_file_transfer_start_message, [0, 2, 3, 1, 4], 235 ),
         MAVLINK_MSG_ID_FILE_TRANSFER_DIR_LIST : ( '<Q240sB', MAVLink_file_transfer_dir_list_message, [0, 1, 2], 93 ),
         MAVLINK_MSG_ID_FILE_TRANSFER_RES : ( '<QB', MAVLink_file_transfer_res_message, [0, 1], 124 ),
@@ -2686,6 +2801,10 @@ class MAVLink_bad_data(MAVLink_message):
                 self.data = data
                 self.reason = reason
                 self._msgbuf = data
+
+        def __str__(self):
+            '''Override the __str__ function from MAVLink_messages because non-printable characters are common in to be the reason for this message to exist.'''
+            return '%s {%s, data:%s}' % (self._type, self.reason, [('%x' % ord(i) if isinstance(i, str) else '%x' % i) for i in self.data])  
             
 class MAVLink(object):
         '''MAVLink protocol handling class'''
@@ -2697,6 +2816,9 @@ class MAVLink(object):
                 self.callback = None
                 self.callback_args = None
                 self.callback_kwargs = None
+                self.send_callback = None
+                self.send_callback_args = None
+                self.send_callback_kwargs = None
                 self.buf = array.array('B')
                 self.expected_length = 6
                 self.have_prefix_error = False
@@ -2716,6 +2838,11 @@ class MAVLink(object):
             self.callback = callback
             self.callback_args = args
             self.callback_kwargs = kwargs
+
+        def set_send_callback(self, callback, *args, **kwargs):
+            self.send_callback = callback
+            self.send_callback_args = args
+            self.send_callback_kwargs = kwargs
             
         def send(self, mavmsg):
                 '''send a MAVLink message'''
@@ -2724,6 +2851,8 @@ class MAVLink(object):
                 self.seq = (self.seq + 1) % 255
                 self.total_packets_sent += 1
                 self.total_bytes_sent += len(buf)
+                if self.send_callback:
+                    self.send_callback(mavmsg, *self.send_callback_args, **self.send_callback_kwargs)
 
         def bytes_needed(self):
             '''return number of bytes needed for next parsing stage'''
@@ -3389,7 +3518,7 @@ class MAVLink(object):
                 '''
                 Wind estimation
 
-                direction                 : wind direction (degrees) (float)
+                direction                 : wind direction that wind is coming from (degrees) (float)
                 speed                     : wind speed in ground plane (m/s) (float)
                 speed_z                   : vertical wind speed (m/s) (float)
 
@@ -3402,7 +3531,7 @@ class MAVLink(object):
                 '''
                 Wind estimation
 
-                direction                 : wind direction (degrees) (float)
+                direction                 : wind direction that wind is coming from (degrees) (float)
                 speed                     : wind speed in ground plane (m/s) (float)
                 speed_z                   : vertical wind speed (m/s) (float)
 
@@ -3504,6 +3633,28 @@ class MAVLink(object):
 
                 '''
                 return self.send(self.data96_encode(type, len, data))
+            
+        def rangefinder_encode(self, distance, voltage):
+                '''
+                Rangefinder reporting
+
+                distance                  : distance in meters (float)
+                voltage                   : raw voltage if available, zero otherwise (float)
+
+                '''
+                msg = MAVLink_rangefinder_message(distance, voltage)
+                msg.pack(self)
+                return msg
+            
+        def rangefinder_send(self, distance, voltage):
+                '''
+                Rangefinder reporting
+
+                distance                  : distance in meters (float)
+                voltage                   : raw voltage if available, zero otherwise (float)
+
+                '''
+                return self.send(self.rangefinder_encode(distance, voltage))
             
         def heartbeat_encode(self, type, autopilot, base_mode, custom_mode, system_status, mavlink_version=3):
                 '''
@@ -3938,9 +4089,9 @@ class MAVLink(object):
 
                 time_usec                 : Timestamp (microseconds since UNIX epoch or microseconds since system boot) (uint64_t)
                 fix_type                  : 0-1: no fix, 2: 2D fix, 3: 3D fix. Some applications will not use the value of this field unless it is at least two, so always correctly fill in the fix. (uint8_t)
-                lat                       : Latitude in 1E7 degrees (int32_t)
-                lon                       : Longitude in 1E7 degrees (int32_t)
-                alt                       : Altitude in 1E3 meters (millimeters) above MSL (int32_t)
+                lat                       : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                lon                       : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                alt                       : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 eph                       : GPS HDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535 (uint16_t)
                 epv                       : GPS VDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535 (uint16_t)
                 vel                       : GPS ground speed (m/s * 100). If unknown, set to: 65535 (uint16_t)
@@ -3963,9 +4114,9 @@ class MAVLink(object):
 
                 time_usec                 : Timestamp (microseconds since UNIX epoch or microseconds since system boot) (uint64_t)
                 fix_type                  : 0-1: no fix, 2: 2D fix, 3: 3D fix. Some applications will not use the value of this field unless it is at least two, so always correctly fill in the fix. (uint8_t)
-                lat                       : Latitude in 1E7 degrees (int32_t)
-                lon                       : Longitude in 1E7 degrees (int32_t)
-                alt                       : Altitude in 1E3 meters (millimeters) above MSL (int32_t)
+                lat                       : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                lon                       : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                alt                       : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 eph                       : GPS HDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535 (uint16_t)
                 epv                       : GPS VDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535 (uint16_t)
                 vel                       : GPS ground speed (m/s * 100). If unknown, set to: 65535 (uint16_t)
@@ -4786,9 +4937,9 @@ class MAVLink(object):
                 the MAV should move from in- to outdoor.
 
                 target_system             : System ID (uint8_t)
-                latitude                  : global position * 1E7 (int32_t)
-                longitude                 : global position * 1E7 (int32_t)
-                altitude                  : global position * 1000 (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84, in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
 
                 '''
                 msg = MAVLink_set_gps_global_origin_message(target_system, latitude, longitude, altitude)
@@ -4804,9 +4955,9 @@ class MAVLink(object):
                 the MAV should move from in- to outdoor.
 
                 target_system             : System ID (uint8_t)
-                latitude                  : global position * 1E7 (int32_t)
-                longitude                 : global position * 1E7 (int32_t)
-                altitude                  : global position * 1000 (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84, in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
 
                 '''
                 return self.send(self.set_gps_global_origin_encode(target_system, latitude, longitude, altitude))
@@ -4816,9 +4967,9 @@ class MAVLink(object):
                 Once the MAV sets a new GPS-Local correspondence, this message
                 announces the origin (0,0,0) position
 
-                latitude                  : Latitude (WGS84), expressed as * 1E7 (int32_t)
-                longitude                 : Longitude (WGS84), expressed as * 1E7 (int32_t)
-                altitude                  : Altitude(WGS84), expressed as * 1000 (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
 
                 '''
                 msg = MAVLink_gps_global_origin_message(latitude, longitude, altitude)
@@ -4830,9 +4981,9 @@ class MAVLink(object):
                 Once the MAV sets a new GPS-Local correspondence, this message
                 announces the origin (0,0,0) position
 
-                latitude                  : Latitude (WGS84), expressed as * 1E7 (int32_t)
-                longitude                 : Longitude (WGS84), expressed as * 1E7 (int32_t)
-                altitude                  : Altitude(WGS84), expressed as * 1000 (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
 
                 '''
                 return self.send(self.gps_global_origin_encode(latitude, longitude, altitude))
@@ -4917,9 +5068,9 @@ class MAVLink(object):
                 (collision avoidance) and to the GCS.
 
                 coordinate_frame          : Coordinate frame - valid values are only MAV_FRAME_GLOBAL or MAV_FRAME_GLOBAL_RELATIVE_ALT (uint8_t)
-                latitude                  : WGS84 Latitude position in degrees * 1E7 (int32_t)
-                longitude                 : WGS84 Longitude position in degrees * 1E7 (int32_t)
-                altitude                  : WGS84 Altitude in meters * 1000 (positive for up) (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 yaw                       : Desired yaw angle in degrees * 100 (int16_t)
 
                 '''
@@ -4933,9 +5084,9 @@ class MAVLink(object):
                 (collision avoidance) and to the GCS.
 
                 coordinate_frame          : Coordinate frame - valid values are only MAV_FRAME_GLOBAL or MAV_FRAME_GLOBAL_RELATIVE_ALT (uint8_t)
-                latitude                  : WGS84 Latitude position in degrees * 1E7 (int32_t)
-                longitude                 : WGS84 Longitude position in degrees * 1E7 (int32_t)
-                altitude                  : WGS84 Altitude in meters * 1000 (positive for up) (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 yaw                       : Desired yaw angle in degrees * 100 (int16_t)
 
                 '''
@@ -4946,9 +5097,9 @@ class MAVLink(object):
                 Set the current global position setpoint.
 
                 coordinate_frame          : Coordinate frame - valid values are only MAV_FRAME_GLOBAL or MAV_FRAME_GLOBAL_RELATIVE_ALT (uint8_t)
-                latitude                  : WGS84 Latitude position in degrees * 1E7 (int32_t)
-                longitude                 : WGS84 Longitude position in degrees * 1E7 (int32_t)
-                altitude                  : WGS84 Altitude in meters * 1000 (positive for up) (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 yaw                       : Desired yaw angle in degrees * 100 (int16_t)
 
                 '''
@@ -4961,9 +5112,9 @@ class MAVLink(object):
                 Set the current global position setpoint.
 
                 coordinate_frame          : Coordinate frame - valid values are only MAV_FRAME_GLOBAL or MAV_FRAME_GLOBAL_RELATIVE_ALT (uint8_t)
-                latitude                  : WGS84 Latitude position in degrees * 1E7 (int32_t)
-                longitude                 : WGS84 Longitude position in degrees * 1E7 (int32_t)
-                altitude                  : WGS84 Altitude in meters * 1000 (positive for up) (int32_t)
+                latitude                  : Latitude (WGS84), in degrees * 1E7 (int32_t)
+                longitude                 : Longitude (WGS84), in degrees * 1E7 (int32_t)
+                altitude                  : Altitude (WGS84), in meters * 1000 (positive for up) (int32_t)
                 yaw                       : Desired yaw angle in degrees * 100 (int16_t)
 
                 '''
@@ -6028,6 +6179,170 @@ class MAVLink(object):
 
                 '''
                 return self.send(self.highres_imu_encode(time_usec, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, temperature, fields_updated))
+            
+        def omnidirectional_flow_encode(self, time_usec, sensor_id, left, right, quality, front_distance_m):
+                '''
+                Optical flow from an omnidirectional flow sensor (e.g. PX4FLOW with
+                wide angle lens)
+
+                time_usec                 : Timestamp (microseconds, synced to UNIX time or since system boot) (uint64_t)
+                sensor_id                 : Sensor ID (uint8_t)
+                left                      : Flow in deci pixels (1 = 0.1 pixel) on left hemisphere (int16_t)
+                right                     : Flow in deci pixels (1 = 0.1 pixel) on right hemisphere (int16_t)
+                quality                   : Optical flow quality / confidence. 0: bad, 255: maximum quality (uint8_t)
+                front_distance_m          : Front distance in meters. Positive value (including zero): distance known. Negative value: Unknown distance (float)
+
+                '''
+                msg = MAVLink_omnidirectional_flow_message(time_usec, sensor_id, left, right, quality, front_distance_m)
+                msg.pack(self)
+                return msg
+            
+        def omnidirectional_flow_send(self, time_usec, sensor_id, left, right, quality, front_distance_m):
+                '''
+                Optical flow from an omnidirectional flow sensor (e.g. PX4FLOW with
+                wide angle lens)
+
+                time_usec                 : Timestamp (microseconds, synced to UNIX time or since system boot) (uint64_t)
+                sensor_id                 : Sensor ID (uint8_t)
+                left                      : Flow in deci pixels (1 = 0.1 pixel) on left hemisphere (int16_t)
+                right                     : Flow in deci pixels (1 = 0.1 pixel) on right hemisphere (int16_t)
+                quality                   : Optical flow quality / confidence. 0: bad, 255: maximum quality (uint8_t)
+                front_distance_m          : Front distance in meters. Positive value (including zero): distance known. Negative value: Unknown distance (float)
+
+                '''
+                return self.send(self.omnidirectional_flow_encode(time_usec, sensor_id, left, right, quality, front_distance_m))
+            
+        def hil_sensor_encode(self, time_usec, roll, pitch, yaw, lat, lon, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, gps_alt, temperature, fields_updated):
+                '''
+                The IMU readings in SI units in NED body frame
+
+                time_usec                 : Timestamp (microseconds, synced to UNIX time or since system boot) (uint64_t)
+                roll                      : Roll angle in inertial frame (rad) (float)
+                pitch                     : Pitch angle in inertial frame (rad) (float)
+                yaw                       : Yaw angle in inertial frame (rad) (float)
+                lat                       : Latitude, expressed as * 1E7 degrees (int32_t)
+                lon                       : Longitude, expressed as * 1E7 degrees (int32_t)
+                xacc                      : X acceleration (m/s^2) (float)
+                yacc                      : Y acceleration (m/s^2) (float)
+                zacc                      : Z acceleration (m/s^2) (float)
+                xgyro                     : Angular speed around X axis in body frame (rad / sec) (float)
+                ygyro                     : Angular speed around Y axis in body frame (rad / sec) (float)
+                zgyro                     : Angular speed around Z axis in body frame (rad / sec) (float)
+                xmag                      : X Magnetic field (Gauss) (float)
+                ymag                      : Y Magnetic field (Gauss) (float)
+                zmag                      : Z Magnetic field (Gauss) (float)
+                abs_pressure              : Absolute pressure in millibar (float)
+                diff_pressure             : Differential pressure (airspeed) in millibar (float)
+                pressure_alt              : Altitude calculated from pressure (float)
+                gps_alt                   : GPS altitude (MSL) WGS84 (float)
+                temperature               : Temperature in degrees celsius (float)
+                fields_updated            : Bitmask for fields that have updated since last message, bit 0 = xacc, bit 12: temperature (uint32_t)
+
+                '''
+                msg = MAVLink_hil_sensor_message(time_usec, roll, pitch, yaw, lat, lon, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, gps_alt, temperature, fields_updated)
+                msg.pack(self)
+                return msg
+            
+        def hil_sensor_send(self, time_usec, roll, pitch, yaw, lat, lon, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, gps_alt, temperature, fields_updated):
+                '''
+                The IMU readings in SI units in NED body frame
+
+                time_usec                 : Timestamp (microseconds, synced to UNIX time or since system boot) (uint64_t)
+                roll                      : Roll angle in inertial frame (rad) (float)
+                pitch                     : Pitch angle in inertial frame (rad) (float)
+                yaw                       : Yaw angle in inertial frame (rad) (float)
+                lat                       : Latitude, expressed as * 1E7 degrees (int32_t)
+                lon                       : Longitude, expressed as * 1E7 degrees (int32_t)
+                xacc                      : X acceleration (m/s^2) (float)
+                yacc                      : Y acceleration (m/s^2) (float)
+                zacc                      : Z acceleration (m/s^2) (float)
+                xgyro                     : Angular speed around X axis in body frame (rad / sec) (float)
+                ygyro                     : Angular speed around Y axis in body frame (rad / sec) (float)
+                zgyro                     : Angular speed around Z axis in body frame (rad / sec) (float)
+                xmag                      : X Magnetic field (Gauss) (float)
+                ymag                      : Y Magnetic field (Gauss) (float)
+                zmag                      : Z Magnetic field (Gauss) (float)
+                abs_pressure              : Absolute pressure in millibar (float)
+                diff_pressure             : Differential pressure (airspeed) in millibar (float)
+                pressure_alt              : Altitude calculated from pressure (float)
+                gps_alt                   : GPS altitude (MSL) WGS84 (float)
+                temperature               : Temperature in degrees celsius (float)
+                fields_updated            : Bitmask for fields that have updated since last message, bit 0 = xacc, bit 12: temperature (uint32_t)
+
+                '''
+                return self.send(self.hil_sensor_encode(time_usec, roll, pitch, yaw, lat, lon, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag, abs_pressure, diff_pressure, pressure_alt, gps_alt, temperature, fields_updated))
+            
+        def sim_state_encode(self, roll, pitch, yaw, xacc, yacc, zacc, xgyro, ygyro, zgyro, lat, lng):
+                '''
+                Status of simulation environment, if used
+
+                roll                      : Roll angle (rad) (float)
+                pitch                     : Pitch angle (rad) (float)
+                yaw                       : Yaw angle (rad) (float)
+                xacc                      : X acceleration m/s/s (float)
+                yacc                      : Y acceleration m/s/s (float)
+                zacc                      : Z acceleration m/s/s (float)
+                xgyro                     : Angular speed around X axis rad/s (float)
+                ygyro                     : Angular speed around Y axis rad/s (float)
+                zgyro                     : Angular speed around Z axis rad/s (float)
+                lat                       : Latitude in degrees (float)
+                lng                       : Longitude in degrees (float)
+
+                '''
+                msg = MAVLink_sim_state_message(roll, pitch, yaw, xacc, yacc, zacc, xgyro, ygyro, zgyro, lat, lng)
+                msg.pack(self)
+                return msg
+            
+        def sim_state_send(self, roll, pitch, yaw, xacc, yacc, zacc, xgyro, ygyro, zgyro, lat, lng):
+                '''
+                Status of simulation environment, if used
+
+                roll                      : Roll angle (rad) (float)
+                pitch                     : Pitch angle (rad) (float)
+                yaw                       : Yaw angle (rad) (float)
+                xacc                      : X acceleration m/s/s (float)
+                yacc                      : Y acceleration m/s/s (float)
+                zacc                      : Z acceleration m/s/s (float)
+                xgyro                     : Angular speed around X axis rad/s (float)
+                ygyro                     : Angular speed around Y axis rad/s (float)
+                zgyro                     : Angular speed around Z axis rad/s (float)
+                lat                       : Latitude in degrees (float)
+                lng                       : Longitude in degrees (float)
+
+                '''
+                return self.send(self.sim_state_encode(roll, pitch, yaw, xacc, yacc, zacc, xgyro, ygyro, zgyro, lat, lng))
+            
+        def radio_status_encode(self, rssi, remrssi, txbuf, noise, remnoise, rxerrors, fixed):
+                '''
+                Status generated by radio
+
+                rssi                      : local signal strength (uint8_t)
+                remrssi                   : remote signal strength (uint8_t)
+                txbuf                     : how full the tx buffer is as a percentage (uint8_t)
+                noise                     : background noise level (uint8_t)
+                remnoise                  : remote background noise level (uint8_t)
+                rxerrors                  : receive errors (uint16_t)
+                fixed                     : count of error corrected packets (uint16_t)
+
+                '''
+                msg = MAVLink_radio_status_message(rssi, remrssi, txbuf, noise, remnoise, rxerrors, fixed)
+                msg.pack(self)
+                return msg
+            
+        def radio_status_send(self, rssi, remrssi, txbuf, noise, remnoise, rxerrors, fixed):
+                '''
+                Status generated by radio
+
+                rssi                      : local signal strength (uint8_t)
+                remrssi                   : remote signal strength (uint8_t)
+                txbuf                     : how full the tx buffer is as a percentage (uint8_t)
+                noise                     : background noise level (uint8_t)
+                remnoise                  : remote background noise level (uint8_t)
+                rxerrors                  : receive errors (uint16_t)
+                fixed                     : count of error corrected packets (uint16_t)
+
+                '''
+                return self.send(self.radio_status_encode(rssi, remrssi, txbuf, noise, remnoise, rxerrors, fixed))
             
         def file_transfer_start_encode(self, transfer_uid, dest_path, direction, file_size, flags):
                 '''

@@ -48,8 +48,11 @@ def mag_heading(RAW_IMU, ATTITUDE, declination=None, SENSOR_OFFSETS=None, ofs=No
         mag_y += ofs[1] - SENSOR_OFFSETS.mag_ofs_y
         mag_z += ofs[2] - SENSOR_OFFSETS.mag_ofs_z
 
-    headX = mag_x*cos(ATTITUDE.pitch) + mag_y*sin(ATTITUDE.roll)*sin(ATTITUDE.pitch) + mag_z*cos(ATTITUDE.roll)*sin(ATTITUDE.pitch)
-    headY = mag_y*cos(ATTITUDE.roll) - mag_z*sin(ATTITUDE.roll)
+    # go via a DCM matrix to match the APM calculation
+    dcm_matrix = rotation(ATTITUDE)
+    headY = mag_y * dcm_matrix.c.z - mag_z * dcm_matrix.c.y
+    headX = mag_x + dcm_matrix.c.x * (headY - mag_x * dcm_matrix.c.x)
+
     heading = degrees(atan2(-headY,headX)) + declination
     if heading < 0:
         heading += 360
@@ -482,7 +485,7 @@ def airspeed(VFR_HUD, ratio=None):
     import mavutil
     mav = mavutil.mavfile_global
     if ratio is None:
-        ratio = 1.98 # APM default
+        ratio = 1.9936 # APM default
     if 'ARSPD_RATIO' in mav.params:
         used_ratio = mav.params['ARSPD_RATIO']
     else:
@@ -490,6 +493,26 @@ def airspeed(VFR_HUD, ratio=None):
     airspeed_pressure = (VFR_HUD.airspeed**2) / used_ratio
     airspeed = sqrt(airspeed_pressure * ratio)
     return airspeed
+
+def airspeed_voltage(VFR_HUD, ratio=None):
+    '''back-calculate the voltage the airspeed sensor must have seen'''
+    import mavutil
+    mav = mavutil.mavfile_global
+    if ratio is None:
+        ratio = 1.9936 # APM default
+    if 'ARSPD_RATIO' in mav.params:
+        used_ratio = mav.params['ARSPD_RATIO']
+    else:
+        used_ratio = ratio
+    if 'ARSPD_OFFSET' in mav.params:
+        offset = mav.params['ARSPD_OFFSET']
+    else:
+        return -1
+    airspeed_pressure = (pow(VFR_HUD.airspeed,2)) / used_ratio
+    raw = airspeed_pressure + offset
+    SCALING_OLD_CALIBRATION = 204.8
+    voltage = 5.0 * raw / 4096
+    return voltage
 
 
 def earth_rates(ATTITUDE):
@@ -569,3 +592,62 @@ def energy_error(NAV_CONTROLLER_OUTPUT, VFR_HUD):
     energy_error = aspeed_energy_error + alt_error*0.098
     return energy_error
 
+def rover_turn_circle(SERVO_OUTPUT_RAW):
+    '''return turning circle (diameter) in meters for steering_angle in degrees
+    '''
+
+    # this matches Toms slash
+    max_wheel_turn = 35
+    wheelbase      = 0.335
+    wheeltrack     = 0.296
+
+    steering_angle = max_wheel_turn * (SERVO_OUTPUT_RAW.servo1_raw - 1500) / 400.0
+    theta = radians(steering_angle)
+    return (wheeltrack/2) + (wheelbase/sin(theta))
+
+def rover_yaw_rate(VFR_HUD, SERVO_OUTPUT_RAW):
+    '''return yaw rate in degrees/second given steering_angle and speed'''
+    max_wheel_turn=35
+    speed = VFR_HUD.groundspeed
+    # assume 1100 to 1900 PWM on steering
+    steering_angle = max_wheel_turn * (SERVO_OUTPUT_RAW.servo1_raw - 1500) / 400.0
+    if abs(steering_angle) < 1.0e-6 or abs(speed) < 1.0e-6:
+        return 0
+    d = rover_turn_circle(SERVO_OUTPUT_RAW)
+    c = pi * d
+    t = c / speed
+    rate = 360.0 / t
+    return rate
+
+def rover_lat_accel(VFR_HUD, SERVO_OUTPUT_RAW):
+    '''return lateral acceleration in m/s/s'''
+    speed = VFR_HUD.groundspeed
+    yaw_rate = rover_yaw_rate(VFR_HUD, SERVO_OUTPUT_RAW)
+    accel = radians(yaw_rate) * speed
+    return accel
+
+
+def demix1(servo1, servo2):
+    '''de-mix a mixed servo output'''
+    s1 = servo1 - 1500
+    s2 = servo2 - 1500
+    out1 = (s1+s2)/2
+    out2 = (s1-s2)/2
+    return out1+1500
+
+def demix2(servo1, servo2):
+    '''de-mix a mixed servo output'''
+    s1 = servo1 - 1500
+    s2 = servo2 - 1500
+    out1 = (s1+s2)/2
+    out2 = (s1-s2)/2
+    return out2+1500
+
+def wrap_180(angle):
+    if angle > 180:
+        angle -= 360.0
+    if angle < -180:
+        angle += 360.0
+    return angle
+
+    
