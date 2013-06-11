@@ -58,7 +58,7 @@ describe('MAVLink message', function() {
     this.heartbeat = new mavlink.messages.heartbeat(
       mavlink.MAV_TYPE_GCS, // 6
       mavlink.MAV_AUTOPILOT_INVALID, // 8
-      0, // base mode, mavlink.MAV_MODE_FLAG_***
+      128, // base mode, mavlink.MAV_MODE_FLAG_SAFETY_ARMED
       0, // custom mode
       mavlink.MAV_STATE_STANDBY, // system status
       3 // MAVLink version
@@ -69,7 +69,7 @@ describe('MAVLink message', function() {
   it('has a set function to facilitate vivifying the object', function() {
     this.heartbeat.type.should.equal(mavlink.MAV_TYPE_GCS);
     this.heartbeat.autopilot.should.equal(mavlink.MAV_AUTOPILOT_INVALID);
-    this.heartbeat.base_mode.should.equal(0);
+    this.heartbeat.base_mode.should.equal(128);
     this.heartbeat.custom_mode.should.equal(0);
     this.heartbeat.system_status.should.equal(mavlink.MAV_STATE_STANDBY);
   });
@@ -85,11 +85,11 @@ describe('MAVLink message', function() {
       0, 0, 0, 0, // custom bitfield -- length 4 (type=I)
       mavlink.MAV_TYPE_GCS,
       mavlink.MAV_AUTOPILOT_INVALID,
-      0,
+      mavlink.MAV_MODE_FLAG_SAFETY_ARMED,
       mavlink.MAV_STATE_STANDBY,
       3,
-      109, // CRC
-      79 // CRC
+      3, // CRC
+      98 // CRC
       ]);
 
   });
@@ -109,7 +109,7 @@ describe('MAVLink message', function() {
       // this.fieldnames = ['type', 'autopilot', 'base_mode', 'custom_mode', 'system_status', 'mavlink_version'];
       message.type.should.equal(mavlink.MAV_TYPE_GCS);  // supposed to be 6
       message.autopilot.should.equal(mavlink.MAV_AUTOPILOT_INVALID); // supposed to be 8
-      message.base_mode.should.equal(0); // supposed to be 0
+      message.base_mode.should.equal(mavlink.MAV_MODE_FLAG_SAFETY_ARMED); // supposed to be 128
       message.custom_mode.should.equal(0);
       message.system_status.should.equal(mavlink.MAV_STATE_STANDBY); // supposed to be 3
       message.mavlink_version.should.equal(3); //?

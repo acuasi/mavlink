@@ -524,7 +524,6 @@ mavlink.prototype.decode = function(msgbuf) {
     m.payload = msgbuf.slice(6);
     m.crc = receivedChecksum;
     m.header = new mavlink.header(msgId, mlen, seq, srcSystem, srcComponent);
-    this.log(m);
     return m;
 }
 
