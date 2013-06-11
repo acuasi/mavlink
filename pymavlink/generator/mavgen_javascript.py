@@ -540,7 +540,6 @@ module.exports = mavlink;
 def generate(basename, xml):
     '''generate complete javascript implementation'''
 
-    print basename;
     if basename.endswith('.js'):
         filename = basename
     else:
