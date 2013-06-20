@@ -1,6 +1,6 @@
 {
-    "name" : "mavlink",
-    "version" : "0.0.1",
+    "name" : "mavlink-generator",
+    "version" : "0.0.2",
     "description" : "Implementation of the MAVLink protocol for various platforms and both 0.9 and 1.0 revisions of MAVLink",
     "dependencies" : {
       "underscore" : "",
