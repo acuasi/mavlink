@@ -12,9 +12,9 @@ for protocol in 0.9 1.0; do
      cat >javascript/implementations/mavlink_${base}_v${protocol}/package.json <<EOF
  {
     "name" : "mavlink_${base}_v${protocol}",
-    "version" : "0.0.1",
+    "version" : "0.0.2",
     "description" : "Implementation of the MAVLink protocol",
-    "keywords" : ["mavlink", "arduino", "megapilot", "ros", "robot", "uav", "drone", "awesome"],
+    "keywords" : ["mavlink", "ardupilot", "arduino", "ros", "robot", "uav", "drone"],
     "homepage": "https://github.com/mavlink/mavlink",
     "bugs" : "https://github.com/mavlink/mavlink/issues",
     "license" : {

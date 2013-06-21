@@ -4,6 +4,12 @@ This code generates ```npm``` modules that can be used with Node.js.  As with th
 
 *See the gotcha's and todo's section below* for some important caveats.  This implementation should be considered pre-beta: it creates a working MAVLink parser, but there's plenty of rough edges in terms of API.
 
+### Changes since 0.0.1 ###
+
+A new function, ```send(message)```, has been added.  To use it, call ```setConnection(connectionObject)```, where ```connectionObject``` must have a function named ```write()```.  Both node ```serialport``` and ```net``` modules support this method.
+
+The ```mavlink_ardupilotmega_v1.0``` module has been published through ```npm```, and can be installed with ```npm install mavlink_ardupilotmega_v1.0```.
+
 ### Generating the JS implementation ###
 
 Folders in the ```implementations/``` directory are ```npm``` modules, automatically generated from XML manifests that are in the [mavlink/mavlink](https://github.com/mavlink/mavlink) project.  If you wish to generate custom MAVLink packets, you would need to follow the directions there.
